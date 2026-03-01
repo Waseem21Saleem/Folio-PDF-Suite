@@ -263,7 +263,7 @@
             left: 0; right: 0;
             overflow: auto;
             background: #0d0d14;
-            padding: 16px 16px 100px;
+            /* NO padding — padding breaks clientWidth measurements */
             z-index: 30;
             -webkit-overflow-scrolling: touch;
         }
@@ -273,9 +273,13 @@
         }
         .upper-canvas { touch-action: none !important; }
 
+        /* scroll-spacer: full-size flex container, centers canvas both ways */
         #scroll-spacer {
-            display: flex; flex-direction: column; align-items: center;
-            min-width: 100%; min-height: 100%;
+            display: flex;
+            justify-content: center;   /* horizontal center */
+            align-items: flex-start;   /* pin to top */
+            padding: 16px;
+            box-sizing: border-box;
         }
 
         #editor-placeholder {
@@ -294,7 +298,9 @@
         #canvas-wrapper {
             display: none; background: white;
             box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-            transform-origin: top left; flex-shrink: 0;
+            /* transform-origin center so scale() keeps canvas centered */
+            transform-origin: top center;
+            flex-shrink: 0;
         }
 
         /* ── Toolbar ── */

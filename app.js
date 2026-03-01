@@ -45,7 +45,10 @@ function showToast(msg) {
     t.textContent = msg;
     t.classList.add('show');
     clearTimeout(_toastTimer);
-    _toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+    _toastTimer = setTimeout(() => {
+        t.classList.remove('show');
+        setTimeout(() => { if (!t.classList.contains('show')) t.textContent = ''; }, 350);
+    }, 2000);
 }
 
 // ─── Navigation ───
@@ -225,16 +228,17 @@ function showObjActions(obj) {
 
     const bound = obj.getBoundingRect(true);
 
-    // Object position in workspace coords (accounting for CSS transform + scroll)
-    // wrapper.style.transform = translate(Xpx,16px) scale(zoom)
-    // So canvas top-left in workspace = (leftShift, 16)
-    const wrapperStyle = wrapper.style.transform || '';
-    const translateMatch = wrapperStyle.match(/translate\((-?\d+\.?\d*)px,\s*(\d+\.?\d*)px\)/);
-    const leftShift = translateMatch ? parseFloat(translateMatch[1]) : 0;
-    const topShift  = translateMatch ? parseFloat(translateMatch[2]) : 16;
+    // wrapper is centered by flexbox + scale(currentZoom) from top center.
+    // Get wrapper's actual position relative to workspace (including scroll).
+    const wrapperRect  = wrapper.getBoundingClientRect();
+    const workspaceRect = workspace.getBoundingClientRect();
 
-    const objLeft = leftShift + bound.left * currentZoom;
-    const objTop  = topShift  + bound.top  * currentZoom;
+    // wrapper top-left relative to the workspace scroll container
+    const wrapperLeft = wrapperRect.left - workspaceRect.left + workspace.scrollLeft;
+    const wrapperTop  = wrapperRect.top  - workspaceRect.top  + workspace.scrollTop;
+
+    const objLeft = wrapperLeft + bound.left * currentZoom;
+    const objTop  = wrapperTop  + bound.top  * currentZoom;
     const objW    = bound.width  * currentZoom;
     const objH    = bound.height * currentZoom;
 
@@ -592,23 +596,21 @@ function applyZoom() {
     const spacer  = document.getElementById('scroll-spacer');
     if (!canvas.width) return;
 
-    const scaledW = Math.round(canvas.width  * currentZoom);
-    const scaledH = Math.round(canvas.height * currentZoom);
-    const wsW     = workspace.clientWidth;
-    const wsH     = workspace.clientHeight;
+    const scaledW = canvas.width  * currentZoom;
+    const scaledH = canvas.height * currentZoom;
 
-    // CSS scale from top-left, then shift to center
-    const leftShift = Math.max(0, Math.floor((wsW - scaledW) / 2));
+    // Scale visually — transform-origin is top center so flexbox centering still works
+    wrapper.style.transform = `scale(${currentZoom})`;
 
-    wrapper.style.transformOrigin = 'top left';
-    wrapper.style.transform       = `translate(${leftShift}px, 16px) scale(${currentZoom})`;
-    wrapper.style.marginLeft      = '0';
+    // Spacer must be at least as wide/tall as the scaled canvas so scrollbars work
+    // Width: max of workspace width or scaled canvas (with padding)
+    spacer.style.minWidth  = (scaledW + 32) + 'px';
+    spacer.style.minHeight = (scaledH + 32) + 'px';
+    // Remove fixed width/height so flexbox can still center when canvas < workspace
+    spacer.style.width  = '';
+    spacer.style.height = '';
 
-    // Spacer tells scrollbars the real content size
-    spacer.style.width  = Math.max(wsW,  scaledW + leftShift + 16) + 'px';
-    spacer.style.height = (scaledH + 48) + 'px';
-
-    // Tell Fabric where the canvas really is on screen
+    // Recalculate where the canvas element is on screen (needed for object hit-testing)
     setTimeout(() => canvas.calcOffset(), 40);
 }
 
