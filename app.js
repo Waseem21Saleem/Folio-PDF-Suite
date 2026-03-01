@@ -31,7 +31,7 @@ function readFileAsArrayBuffer(file) {
     });
 }
 function rgbToHex(r, g, b) {
-    return "#" + (1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1);
+    return "#" + (1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1).padStart(6, '0');
 }
 
 function showLoader(text = 'Processing...') {
@@ -179,12 +179,30 @@ canvas.on('path:created', function(opt) {
     }
 });
 
-// Color Selection via custom mobile palette
+// Color Selection
 function selectColor(element, hex) {
     document.getElementById('colorPicker').value = hex;
     document.querySelectorAll('.color-dot').forEach(el => el.classList.remove('selected'));
-    element.classList.add('selected');
+    if (element) element.classList.add('selected');
     updateStyle();
+}
+
+// Text Formatting Toggle
+function toggleTextProp(prop, onVal, offVal) {
+    const btnMap = { 'fontWeight': 'btn-bold', 'fontStyle': 'btn-italic', 'underline': 'btn-underline' };
+    const btn = document.getElementById(btnMap[prop]);
+    const isActive = btn.classList.contains('active');
+    const newVal = isActive ? offVal : onVal;
+    
+    if (isActive) btn.classList.remove('active');
+    else btn.classList.add('active');
+
+    const activeObj = canvas.getActiveObject();
+    if (activeObj && activeObj.type === 'i-text') {
+        activeObj.set(prop, newVal);
+        canvas.renderAll();
+        isDirty = true;
+    }
 }
 
 const TOOLS_WITH_PROPS = new Set(['text', 'pen', 'highlighter', 'shape']);
@@ -194,9 +212,7 @@ function showToolBubble(toolName) {
     document.getElementById('shape-wrap').style.display = (toolName === 'shape' || toolName === 'selected-shape') ? 'flex' : 'none';
 
     let btn = document.getElementById('tool-' + toolName);
-    if (!btn && toolName.includes('selected')) {
-        btn = document.getElementById('tool-pan'); 
-    }
+    if (!btn && toolName.includes('selected')) btn = document.getElementById('tool-pan'); 
 
     const editorRect = document.getElementById('editor-screen').getBoundingClientRect();
     if (btn) {
@@ -257,10 +273,8 @@ function showObjActions(obj) {
 
         const maxLeft = workspace.scrollLeft + workspace.clientWidth - bw - 4;
         left = Math.max(workspace.scrollLeft + 4, Math.min(left, maxLeft));
-
         bar.style.top  = top  + 'px';
         bar.style.left = left + 'px';
-
         const arrow = document.getElementById('obj-actions-arrow');
         const cx = (objLeft + objW / 2) - left;
         arrow.style.left = Math.max(12, Math.min(cx, bw - 12)) + 'px';
@@ -368,11 +382,6 @@ workspace.addEventListener('wheel', (e) => {
 let isDragging = false, lastPosX, lastPosY;
 let isScanning = false, scanStartX = 0, scanStartY = 0, scanRectOverlay = null;
 
-function setManipulating(val) {
-    if (val) workspace.style.overflow = 'hidden';
-    else workspace.style.overflow = 'auto';
-}
-
 canvas.on('mouse:down', function(opt) {
     const ptr = canvas.getPointer(opt.e);
     
@@ -390,7 +399,7 @@ canvas.on('mouse:down', function(opt) {
     }
 
     if (activeTool === 'pan') {
-        if (opt.target) { setManipulating(true); return; }
+        if (opt.target) return; 
         if (!opt.e.touches || opt.e.touches.length === 1) {
             isDragging = true;
             canvas.defaultCursor = 'grabbing';
@@ -399,11 +408,18 @@ canvas.on('mouse:down', function(opt) {
         }
     } else if (activeTool === 'text') {
         if (opt.target?.type === 'i-text') return;
+        const isBold = document.getElementById('btn-bold').classList.contains('active');
+        const isItalic = document.getElementById('btn-italic').classList.contains('active');
+        const isUnderline = document.getElementById('btn-underline').classList.contains('active');
+
         const obj = new fabric.IText('Tap to type', {
             left: ptr.x, top: ptr.y,
             fill: document.getElementById('colorPicker').value,
             fontSize: parseInt(document.getElementById('sizePicker').value) || 20,
             fontFamily: document.getElementById('fontFamily').value,
+            fontWeight: isBold ? 'bold' : 'normal',
+            fontStyle: isItalic ? 'italic' : 'normal',
+            underline: isUnderline,
             originX: 'left', originY: 'top',
         });
         canvas.add(obj); canvas.setActiveObject(obj); canvas.renderAll();
@@ -464,7 +480,6 @@ canvas.on('mouse:move', function(opt) {
 
 canvas.on('mouse:up', () => {
     isDragging = false;
-    setManipulating(false);
     if (activeTool === 'pan') canvas.defaultCursor = 'grab';
 
     if (isScanning && scanRectOverlay) {
@@ -481,6 +496,7 @@ canvas.on('mouse:up', () => {
     }
 });
 
+// Drag to Scan Executor
 function executeScan(bounds) {
     if (!currentPageTextContent || !currentRawViewport || !bgCanvasData) {
         showToast("PDF data not available"); return;
@@ -500,7 +516,11 @@ function executeScan(bounds) {
         let th = Math.abs(item.transform[0]);
         let tw = item.width;
 
-        if (tx + tw >= bounds.left && tx <= bounds.left + bounds.width && ty >= pdfYBot && ty <= pdfYTop) {
+        // Check if text center is within scan box
+        let cx = tx + tw / 2;
+        let cy = ty + th / 2;
+
+        if (cx >= bounds.left && cx <= bounds.left + bounds.width && cy >= pdfYBot && cy <= pdfYTop) {
             if (th > maxFontSize) {
                 maxFontSize = th;
                 detectedSize = Math.round(th);
@@ -515,12 +535,13 @@ function executeScan(bounds) {
 
     let detectedColor = "#000000";
     try {
-        let sx = bounds.left * PDF_QUALITY;
-        let sy = bounds.top * PDF_QUALITY;
-        let sw = bounds.width * PDF_QUALITY;
-        let sh = bounds.height * PDF_QUALITY;
-        let imgData = bgCanvasData.getImageData(sx, sy, sw, sh).data;
+        let shrink = 0.2; // Skip white borders
+        let sx = (bounds.left + bounds.width * shrink) * PDF_QUALITY;
+        let sy = (bounds.top + bounds.height * shrink) * PDF_QUALITY;
+        let sw = Math.max(1, (bounds.width * (1 - shrink*2)) * PDF_QUALITY);
+        let sh = Math.max(1, (bounds.height * (1 - shrink*2)) * PDF_QUALITY);
         
+        let imgData = bgCanvasData.getImageData(sx, sy, sw, sh).data;
         let colorCounts = {};
         let maxColor = "#000000";
         let maxCount = 0;
@@ -539,18 +560,16 @@ function executeScan(bounds) {
         if (maxCount > 0) detectedColor = maxColor;
     } catch (e) { console.warn("Pixel scan failed", e); }
 
+    const rainbowBtn = document.querySelector('.color-rainbow');
     if (foundText) {
         document.getElementById('sizePicker').value = detectedSize;
         document.getElementById('fontFamily').value = detectedFont;
-        selectColor(document.querySelector('.color-rainbow'), detectedColor);
-        document.getElementById('colorPicker').value = detectedColor;
+        selectColor(rainbowBtn, detectedColor);
         showToast(`Matched: ${detectedSize}px ${detectedFont}`);
     } else {
-        selectColor(document.querySelector('.color-rainbow'), detectedColor);
-        document.getElementById('colorPicker').value = detectedColor;
+        selectColor(rainbowBtn, detectedColor);
         showToast(`Color picked: ${detectedColor}`);
     }
-    
     setTool('text');
 }
 
@@ -586,7 +605,7 @@ canvas.on('mouse:down', function(tapOpt) {
     }
 });
 
-// Object Events (Fixes mobile touch-drag blocking)
+// Object Events
 canvas.on('object:moving',   (opt) => { showObjActions(opt.target); });
 canvas.on('object:scaling',  (opt) => { showObjActions(opt.target); });
 canvas.on('object:rotating', (opt) => { showObjActions(opt.target); });
@@ -626,6 +645,14 @@ function syncToolbar(obj) {
         selectColor(document.querySelector('.color-rainbow'), obj.fill || '#000000');
         document.getElementById('sizePicker').value  = obj.fontSize || 20;
         document.getElementById('fontFamily').value  = obj.fontFamily || 'Arial';
+        
+        const btnB = document.getElementById('btn-bold');
+        const btnI = document.getElementById('btn-italic');
+        const btnU = document.getElementById('btn-underline');
+        if (obj.fontWeight === 'bold') btnB.classList.add('active'); else btnB.classList.remove('active');
+        if (obj.fontStyle === 'italic') btnI.classList.add('active'); else btnI.classList.remove('active');
+        if (obj.underline) btnU.classList.add('active'); else btnU.classList.remove('active');
+
         showToolBubble('selected-text');
     } else if (obj.type === 'rect' || obj.type === 'circle' || obj.type === 'triangle' || obj.type === 'line' || obj.type === 'path') {
         const col = obj.stroke || obj.fill || '#000000';
@@ -821,6 +848,24 @@ function insertStamp() {
         grid.appendChild(btn);
     });
     openModal('stamp-modal');
+}
+
+function insertCustomStamp() {
+    const textVal = document.getElementById('custom-stamp-text').value.trim();
+    const colorVal = document.getElementById('custom-stamp-color').value;
+    if (!textVal) return showToast("Enter stamp text");
+
+    const text = new fabric.Text(textVal.toUpperCase(), {
+        left: canvas.width/2, top: canvas.height/2,
+        originX: 'center', originY: 'center',
+        fill: colorVal, fontSize: 36, fontFamily: 'Impact',
+        opacity: 0.8, stroke: colorVal, strokeWidth: 1, angle: -15,
+    });
+    canvas.add(text); canvas.setActiveObject(text);
+    setTool('pan'); isDirty = true;
+    closeModal('stamp-modal');
+    showToast(`Custom stamp added`);
+    document.getElementById('custom-stamp-text').value = '';
 }
 
 function openExportModal() {
@@ -1214,4 +1259,6 @@ window.undo                = undo;
 window.redo                = redo;
 window.updateStyle         = updateStyle;
 window.selectColor         = selectColor;
+window.toggleTextProp       = toggleTextProp;
 window.insertStamp         = insertStamp;
+window.insertCustomStamp   = insertCustomStamp;

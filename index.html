@@ -2,18 +2,17 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <link rel="icon" type="image/x-icon"  href="./icons/favicon.ico?v=10">
-    <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png?v=10">
-    <link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16.png?v=10">
-    <link rel="apple-touch-icon" sizes="180x180" href="./icons/favicon-180.png?v=10">
+    <link rel="icon" type="image/x-icon"  href="./icons/favicon.ico?v=11">
+    <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png?v=11">
+    <link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16.png?v=11">
+    <link rel="apple-touch-icon" sizes="180x180" href="./icons/favicon-180.png?v=11">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#0a0a0f">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
-    
     <title>Folio — PDF Suite</title>
-    <link rel="manifest" href="./manifest.json?v=10">
-    <script src="./app.js?v=10" defer></script>
+    <link rel="manifest" href="./manifest.json?v=11">
+    <script src="./app.js?v=11" defer></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
     
@@ -112,12 +111,15 @@
         .placeholder-icon { width: 64px; height: 64px; border: 2px dashed var(--border); border-radius: 18px; display: flex; align-items: center; justify-content: center; font-size: 26px; margin-bottom: 4px; }
         #canvas-wrapper { display: none; background: white; box-shadow: 0 20px 60px rgba(0,0,0,0.5); transform-origin: top center; flex-shrink: 0; }
 
-        /* COLOR PICKER DOTS */
+        /* COLOR PICKER DOTS & TEXT FORMATS */
         .color-dot { width: 22px; height: 22px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; flex-shrink: 0; transition: transform 0.1s; }
         .color-dot:active { transform: scale(0.85); }
         .color-dot.selected { border-color: white; box-shadow: 0 0 8px rgba(255,255,255,0.4); }
         .color-rainbow { background: linear-gradient(135deg, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff); position: relative; display: flex; justify-content: center; align-items: center; }
         .color-rainbow input { opacity: 0; position: absolute; inset: 0; cursor: pointer; }
+        
+        .text-format-btn { background: transparent; border: 1px solid transparent; color: var(--text-muted); width: 24px; height: 24px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+        .text-format-btn.active { background: rgba(108,99,255,0.2); color: var(--accent); border-color: var(--accent); }
 
         #toolbar { position: absolute; bottom: 0; left: 0; right: 0; height: var(--toolbar-h); background: var(--surface); border-top: 1px solid var(--border); display: flex; align-items: center; gap: 0; padding: 0 4px; overflow-x: auto; overflow-y: hidden; z-index: 40; -ms-overflow-style: none; scrollbar-width: none; }
         #toolbar::-webkit-scrollbar { display: none; }
@@ -291,15 +293,18 @@
         <input type="number" id="sizePicker" value="20" min="1" max="150" oninput="updateStyle()"
             style="width:48px;background:var(--surface3);border:1px solid var(--border);color:var(--text);padding:5px;border-radius:8px;font-size:12px;outline:none;font-family:var(--font-body);">
         
-        <div id="font-wrap" style="display:flex;align-items:center;gap:6px;">
-            <div style="width:1px;height:20px;background:var(--border);flex-shrink:0;"></div>
+        <div id="font-wrap" style="display:flex;align-items:center;gap:4px;">
+            <div style="width:1px;height:20px;background:var(--border);flex-shrink:0;margin:0 2px;"></div>
             <select id="fontFamily" onchange="updateStyle()"
-                style="background:var(--surface3);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:8px;font-size:12px;outline:none;font-family:var(--font-body);">
+                style="background:var(--surface3);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:8px;font-size:12px;outline:none;font-family:var(--font-body);margin-right:4px;">
                 <option value="Arial">Sans</option>
                 <option value="Georgia">Serif</option>
                 <option value="Courier New">Mono</option>
                 <option value="Impact">Impact</option>
             </select>
+            <button id="btn-bold" class="text-format-btn" onclick="toggleTextProp('fontWeight', 'bold', 'normal')" style="font-weight:bold;">B</button>
+            <button id="btn-italic" class="text-format-btn" onclick="toggleTextProp('fontStyle', 'italic', 'normal')" style="font-style:italic; font-family:serif;">I</button>
+            <button id="btn-underline" class="text-format-btn" onclick="toggleTextProp('underline', true, false)" style="text-decoration:underline;">U</button>
         </div>
 
         <div id="shape-wrap" style="display:none;align-items:center;gap:6px;">
@@ -493,8 +498,18 @@
         <h3>Insert Stamp</h3>
         <p>Choose a stamp to insert onto the page</p>
         <div id="stamp-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;"></div>
-        <div class="modal-actions">
-            <button class="btn btn-ghost" onclick="closeModal('stamp-modal')">Cancel</button>
+        
+        <div style="border-top: 1px solid var(--border-strong); padding-top: 16px;">
+            <h4 style="font-family: var(--font-display); font-size: 14px; margin-bottom: 8px;">Custom Stamp</h4>
+            <input type="text" id="custom-stamp-text" class="form-input" placeholder="Type stamp text..." style="margin-bottom:10px;">
+            <div style="display:flex; gap:10px; align-items:center; margin-bottom:14px;">
+                <input type="color" id="custom-stamp-color" value="#6c63ff" style="width:36px;height:36px;border:none;background:none;cursor:pointer;">
+                <label style="font-size:12px;color:var(--text-muted);">Stamp Color</label>
+            </div>
+            <div style="display:flex; gap:8px;">
+                <button class="btn btn-ghost" onclick="closeModal('stamp-modal')" style="flex:1; justify-content:center;">Cancel</button>
+                <button class="btn btn-primary" onclick="insertCustomStamp()" style="flex:2; justify-content:center;">Create & Insert</button>
+            </div>
         </div>
     </div>
 </div>
