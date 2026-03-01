@@ -35,12 +35,8 @@ function showLoader(text = 'Processing...') {
     document.getElementById('loader-text').innerText = text;
     document.getElementById('loader-overlay').classList.add('visible');
 }
-
-function hideLoader() {
-    document.getElementById('loader-overlay').classList.remove('visible');
-}
-
-function openModal(id) { document.getElementById(id).classList.add('open'); }
+function hideLoader() { document.getElementById('loader-overlay').classList.remove('visible'); }
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
 let _toastTimer;
@@ -60,7 +56,6 @@ function attemptNavHome() {
     if (isDirty) openModal('unsaved-modal');
     else navTo('home');
 }
-
 function confirmNavHome() {
     closeModal('unsaved-modal');
     isDirty = false;
@@ -72,15 +67,11 @@ function navTo(screenId) {
     document.getElementById(screenId + '-screen').classList.add('active');
     currentScreen = screenId;
 
-    const header = document.getElementById('tool-header');
-    const title = document.getElementById('tool-title');
+    const header  = document.getElementById('tool-header');
+    const title   = document.getElementById('tool-title');
     const actions = document.getElementById('header-actions');
 
-    if (screenId === 'home') {
-        header.classList.remove('visible');
-        return;
-    }
-
+    if (screenId === 'home') { header.classList.remove('visible'); return; }
     header.classList.add('visible');
 
     if (screenId === 'editor') {
@@ -141,38 +132,35 @@ let canvas = new fabric.Canvas('main-canvas', {
 let sigCanvas, pdfDoc = null, pageNum = 1, currentZoom = 1;
 let pageStates = {}, activeTool = 'pan';
 let undoStack = [], redoStack = [];
+let _suppressUndo = false;
 
-// ─── Undo system ───
+// ─── Undo/Redo ───
 function pushUndo() {
     if (_suppressUndo) return;
     undoStack.push(JSON.stringify(canvas));
-    if (undoStack.length > 30) undoStack.shift();
+    if (undoStack.length > 40) undoStack.shift();
     redoStack = [];
 }
 
 function undo() {
     if (!undoStack.length) { showToast('Nothing to undo'); return; }
-    redoStack.push(JSON.stringify(canvas));
-    const state = undoStack.pop();
     _suppressUndo = true;
-    canvas.loadFromJSON(state, () => { canvas.renderAll(); _suppressUndo = false; });
+    redoStack.push(JSON.stringify(canvas));
+    canvas.loadFromJSON(undoStack.pop(), () => { canvas.renderAll(); _suppressUndo = false; hideObjActions(); });
     isDirty = true;
 }
 
 function redo() {
     if (!redoStack.length) { showToast('Nothing to redo'); return; }
-    undoStack.push(JSON.stringify(canvas));
-    const state = redoStack.pop();
     _suppressUndo = true;
-    canvas.loadFromJSON(state, () => { canvas.renderAll(); _suppressUndo = false; });
+    undoStack.push(JSON.stringify(canvas));
+    canvas.loadFromJSON(redoStack.pop(), () => { canvas.renderAll(); _suppressUndo = false; hideObjActions(); });
     isDirty = true;
 }
 
-let _suppressUndo = false;
-
-canvas.on('object:added',   () => { isDirty = true; pushUndo(); });
-canvas.on('object:modified',() => { isDirty = true; pushUndo(); });
-canvas.on('object:removed', () => { isDirty = true; pushUndo(); });
+canvas.on('object:added',    () => { isDirty = true; pushUndo(); });
+canvas.on('object:modified', () => { isDirty = true; pushUndo(); });
+canvas.on('object:removed',  () => { isDirty = true; pushUndo(); });
 canvas.on('path:created', function(opt) {
     isDirty = true;
     if (activeTool === 'highlighter') {
@@ -181,10 +169,99 @@ canvas.on('path:created', function(opt) {
     }
 });
 
-// ─── Tool management ───
-// Tools that need the color/size/font prop bar
+// ─── Floating tool bubble (shown above toolbar button) ───
 const TOOLS_WITH_PROPS = new Set(['text', 'pen', 'highlighter', 'shape']);
+const FONT_TOOLS       = new Set(['text']);
 
+function showToolBubble(toolName) {
+    const bubble = document.getElementById('tool-bubble');
+    const fontWrap = document.getElementById('font-wrap');
+
+    // Show/hide font section depending on tool
+    fontWrap.style.display = FONT_TOOLS.has(toolName) || toolName === 'selected-text' ? 'flex' : 'none';
+
+    // Position bubble above the toolbar button
+    const btn = document.getElementById('tool-' + toolName);
+    const toolbar = document.getElementById('toolbar');
+    const editorRect = document.getElementById('editor-screen').getBoundingClientRect();
+
+    if (btn) {
+        const btnRect = btn.getBoundingClientRect();
+        const cx = btnRect.left + btnRect.width / 2 - editorRect.left;
+        bubble.style.display = 'flex';
+        bubble.style.bottom = (toolbar.offsetHeight + 6) + 'px';
+        // Clamp so bubble never goes off screen
+        requestAnimationFrame(() => {
+            const bw = bubble.offsetWidth;
+            let left = cx - bw / 2;
+            left = Math.max(8, Math.min(left, editorRect.width - bw - 8));
+            bubble.style.left = left + 'px';
+            bubble.style.transform = 'none';
+            // Move arrow to point at button
+            const arrow = document.getElementById('bubble-arrow');
+            arrow.style.left = (cx - left) + 'px';
+        });
+    } else {
+        bubble.style.display = 'flex';
+        bubble.style.left = '50%';
+        bubble.style.transform = 'translateX(-50%)';
+        bubble.style.bottom = (toolbar.offsetHeight + 6) + 'px';
+    }
+}
+
+function hideToolBubble() {
+    document.getElementById('tool-bubble').style.display = 'none';
+}
+
+// ─── Floating object action bar (delete/duplicate shown above selected object) ───
+function showObjActions(obj) {
+    const bar = document.getElementById('obj-actions');
+    const ws  = document.getElementById('workspace');
+    const wrapper = document.getElementById('canvas-wrapper');
+
+    if (!obj) { hideObjActions(); return; }
+
+    const wrapperRect = wrapper.getBoundingClientRect();
+    const editorRect  = document.getElementById('editor-screen').getBoundingClientRect();
+
+    const bound = obj.getBoundingRect(true);
+    // Object top in page coords → screen coords
+    const objTopScreen  = wrapperRect.top  + bound.top  * currentZoom;
+    const objLeftScreen = wrapperRect.left + bound.left * currentZoom;
+    const objWidth      = bound.width * currentZoom;
+
+    // Convert to editor-relative coords
+    const topInEditor  = objTopScreen  - editorRect.top;
+    const leftInEditor = objLeftScreen - editorRect.left;
+
+    bar.style.display = 'flex';
+
+    requestAnimationFrame(() => {
+        const bw = bar.offsetWidth;
+        const bh = bar.offsetHeight;
+
+        let top  = topInEditor - bh - 10;
+        let left = leftInEditor + objWidth / 2 - bw / 2;
+
+        // Don't go above screen
+        if (top < 4) top = topInEditor + bound.height * currentZoom + 10;
+        left = Math.max(4, Math.min(left, editorRect.width - bw - 4));
+
+        bar.style.top  = top  + 'px';
+        bar.style.left = left + 'px';
+
+        // Center the arrow
+        const arrow = document.getElementById('obj-actions-arrow');
+        const cx = leftInEditor + objWidth / 2 - left;
+        arrow.style.left = Math.max(12, Math.min(cx, bw - 12)) + 'px';
+    });
+}
+
+function hideObjActions() {
+    document.getElementById('obj-actions').style.display = 'none';
+}
+
+// ─── Tool management ───
 function setTool(tool) {
     activeTool = tool;
     document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
@@ -192,38 +269,72 @@ function setTool(tool) {
     if (btn) btn.classList.add('active');
 
     canvas.isDrawingMode = (tool === 'pen' || tool === 'highlighter');
-    canvas.selection = (tool === 'pan');
+    canvas.selection     = (tool !== 'pen' && tool !== 'highlighter');
     canvas.defaultCursor = tool === 'pan' ? 'grab' : tool === 'text' ? 'text' : 'crosshair';
 
-    // Show/hide prop bar and adjust workspace
-    const propBar  = document.getElementById('prop-bar');
-    const ws       = document.getElementById('workspace');
-    const showProp = TOOLS_WITH_PROPS.has(tool);
-    propBar.classList.toggle('visible', showProp);
-    ws.classList.toggle('prop-visible', showProp);
+    // Show/hide floating bubble
+    if (TOOLS_WITH_PROPS.has(tool)) {
+        showToolBubble(tool);
+    } else {
+        hideToolBubble();
+    }
 
+    // Hide obj actions when switching tools
+    hideObjActions();
     updateStyle();
 }
 
 // ─── Pinch-to-zoom ───
 let initialPinchDistance = null;
 const workspace = document.getElementById('workspace');
+
 workspace.addEventListener('touchstart', (e) => {
     if (e.touches.length === 2)
-        initialPinchDistance = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
-});
+        initialPinchDistance = Math.hypot(
+            e.touches[0].pageX - e.touches[1].pageX,
+            e.touches[0].pageY - e.touches[1].pageY
+        );
+}, { passive: true });
+
 workspace.addEventListener('touchmove', (e) => {
     if (e.touches.length === 2 && initialPinchDistance) {
         e.preventDefault();
-        const d = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+        const d = Math.hypot(
+            e.touches[0].pageX - e.touches[1].pageX,
+            e.touches[0].pageY - e.touches[1].pageY
+        );
         setZoom(d > initialPinchDistance ? 0.04 : -0.04);
         initialPinchDistance = d;
     }
 }, { passive: false });
-workspace.addEventListener('touchend', () => initialPinchDistance = null);
+
+workspace.addEventListener('touchend', () => { initialPinchDistance = null; });
 
 // ─── Canvas events ───
 let isDragging = false, lastPosX, lastPosY;
+
+// CRITICAL: prevent workspace from scrolling when manipulating objects.
+// We do this by intercepting touchmove on the canvas element itself.
+const canvasEl = document.getElementById('main-canvas');
+canvasEl.addEventListener('touchmove', (e) => {
+    // If an object is selected and being manipulated, block scroll
+    if (canvas.getActiveObject() && activeTool !== 'pan') {
+        e.stopPropagation();
+    } else if (canvas.getActiveObject()) {
+        e.stopPropagation();
+    }
+}, { passive: false });
+
+// Also prevent the upper-canvas (fabric's event layer) from propagating touch when moving objects
+const upperCanvas = document.querySelector('.upper-canvas');
+if (upperCanvas) {
+    upperCanvas.addEventListener('touchmove', (e) => {
+        if (canvas.getActiveObject()) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    }, { passive: false });
+}
 
 canvas.on('mouse:down', function(opt) {
     if (activeTool === 'pan') {
@@ -254,18 +365,32 @@ canvas.on('mouse:down', function(opt) {
             width: 120, height: 80,
             fill: 'transparent',
             stroke: document.getElementById('colorPicker').value,
-            strokeWidth: parseInt(document.getElementById('sizePicker').value) / 5 || 2,
+            strokeWidth: Math.max(1, parseInt(document.getElementById('sizePicker').value) / 5),
             rx: 4, ry: 4,
         });
         canvas.add(rect);
         canvas.setActiveObject(rect);
         setTool('pan');
+    } else if (activeTool === 'sig-place') {
+        // Signature placement: user clicked where they want the center of the sig
+        const ptr = canvas.getPointer(opt.e);
+        setTool('pan');
+        canvas.defaultCursor = 'default';
+        _pendingSigCenter = ptr;
+        openModal('sig-modal');
+        if (!sigCanvas) {
+            sigCanvas = new fabric.Canvas('sig-canvas', { isDrawingMode: true });
+            sigCanvas.freeDrawingBrush.width = 3;
+            sigCanvas.freeDrawingBrush.color = '#000000';
+        }
+        sigCanvas.clear();
+        sigCanvas.renderAll();
     }
 });
 
 canvas.on('mouse:move', function(opt) {
     if (isDragging && activeTool === 'pan') {
-        const e = opt.e;
+        const e  = opt.e;
         const cx = e.clientX ?? e.touches?.[0].clientX;
         const cy = e.clientY ?? e.touches?.[0].clientY;
         if (cx !== undefined) {
@@ -279,36 +404,66 @@ canvas.on('mouse:move', function(opt) {
 canvas.on('mouse:up', () => {
     isDragging = false;
     if (activeTool === 'pan') canvas.defaultCursor = 'grab';
-    workspace.style.overflow = 'auto';
 });
 
-// When user starts moving/scaling a fabric object, lock workspace scroll
-canvas.on('object:moving',  () => { workspace.style.overflow = 'hidden'; });
-canvas.on('object:scaling', () => { workspace.style.overflow = 'hidden'; });
-canvas.on('object:rotating',() => { workspace.style.overflow = 'hidden'; });
-canvas.on('selection:created', syncToolbar);
-canvas.on('selection:updated', syncToolbar);
-canvas.on('text:editing:entered', syncToolbar);
+// Lock workspace scroll while dragging/scaling objects
+canvas.on('object:moving',   lockScroll);
+canvas.on('object:scaling',  lockScroll);
+canvas.on('object:rotating', lockScroll);
+canvas.on('mouse:up',        unlockScroll);
+canvas.on('mouse:out',       unlockScroll);
 
-function syncToolbar() {
-    const active = canvas.getActiveObject();
-    if (active?.type === 'i-text') {
-        document.getElementById('colorPicker').value = active.fill || '#000000';
-        document.getElementById('sizePicker').value = active.fontSize || 20;
-        document.getElementById('fontFamily').value = active.fontFamily || 'Arial';
-        // Show prop bar when a text object is selected
-        document.getElementById('prop-bar').classList.add('visible');
-        document.getElementById('workspace').classList.add('prop-visible');
-    }
+function lockScroll() {
+    workspace.classList.add('locked');
+}
+function unlockScroll() {
+    workspace.classList.remove('locked');
 }
 
+// Update obj-actions position while dragging
+canvas.on('object:moving', (opt) => {
+    lockScroll();
+    showObjActions(opt.target);
+});
+canvas.on('object:scaling', (opt) => {
+    lockScroll();
+    showObjActions(opt.target);
+});
+
+canvas.on('selection:created', (opt) => {
+    syncToolbar(opt.selected?.[0] || canvas.getActiveObject());
+    showObjActions(canvas.getActiveObject());
+});
+canvas.on('selection:updated', (opt) => {
+    syncToolbar(canvas.getActiveObject());
+    showObjActions(canvas.getActiveObject());
+});
+canvas.on('text:editing:entered', () => {
+    syncToolbar(canvas.getActiveObject());
+});
 canvas.on('selection:cleared', () => {
-    // Hide prop bar when nothing is selected and not in a drawing tool
+    hideObjActions();
+    // Hide bubble only if not in a drawing tool
     if (!TOOLS_WITH_PROPS.has(activeTool)) {
-        document.getElementById('prop-bar').classList.remove('visible');
-        document.getElementById('workspace').classList.remove('prop-visible');
+        hideToolBubble();
     }
 });
+
+function syncToolbar(obj) {
+    obj = obj || canvas.getActiveObject();
+    if (!obj) return;
+
+    if (obj.type === 'i-text') {
+        document.getElementById('colorPicker').value = obj.fill || '#000000';
+        document.getElementById('sizePicker').value  = obj.fontSize || 20;
+        document.getElementById('fontFamily').value  = obj.fontFamily || 'Arial';
+        showToolBubble('text');
+    } else if (obj.type === 'rect' || obj.type === 'path') {
+        const col = obj.stroke || obj.fill || '#000000';
+        document.getElementById('colorPicker').value = col !== 'transparent' ? col : '#000000';
+        showToolBubble('shape');
+    }
+}
 
 // ─── Load PDF ───
 document.getElementById('upload-pdf').addEventListener('change', async (e) => {
@@ -317,7 +472,7 @@ document.getElementById('upload-pdf').addEventListener('change', async (e) => {
         showLoader('Loading PDF...');
         const ab = await readFileAsArrayBuffer(file);
         pdfDoc = await pdfjsLib.getDocument(new Uint8Array(ab)).promise;
-        pageNum = 1; pageStates = {}; isDirty = false; undoStack = [];
+        pageNum = 1; pageStates = {}; isDirty = false; undoStack = []; redoStack = [];
         document.getElementById('editor-placeholder').style.display = 'none';
         document.getElementById('canvas-wrapper').style.display = 'block';
         await renderPage(pageNum, true);
@@ -336,7 +491,7 @@ async function renderPage(num, autoFit = false) {
     const baseVP = page.getViewport({ scale: 1.5 });
 
     if (autoFit) {
-        const avail = document.getElementById('workspace').clientWidth - 48;
+        const avail = workspace.clientWidth - 48;
         currentZoom = Math.min(avail / baseVP.width, 1.0);
     }
 
@@ -364,6 +519,8 @@ function changePage(offset) {
     if (np > 0 && np <= pdfDoc.numPages) {
         pageStates[pageNum] = JSON.stringify(canvas);
         pageNum = np;
+        hideObjActions();
+        hideToolBubble();
         renderPage(pageNum);
     }
 }
@@ -373,9 +530,7 @@ function updateZoomDisplay() {
     const spacer  = document.getElementById('scroll-spacer');
     wrapper.style.transform = `scale(${currentZoom})`;
     if (canvas) {
-        // The spacer needs to be as wide/tall as the scaled canvas so scrolling works
-        // Canvas is centered via flexbox in scroll-spacer, so only height matters for scroll
-        spacer.style.height = `${canvas.height * currentZoom + 48}px`;
+        spacer.style.height   = `${canvas.height * currentZoom + 60}px`;
         spacer.style.minWidth = '100%';
     }
     canvas.calcOffset();
@@ -403,6 +558,10 @@ function updateStyle() {
         active.set({ fill: color, fontSize: size, fontFamily: font });
         canvas.renderAll();
         isDirty = true;
+    } else if (active?.type === 'rect') {
+        active.set({ stroke: color, strokeWidth: Math.max(1, size / 5) });
+        canvas.renderAll();
+        isDirty = true;
     }
 
     if (activeTool === 'highlighter') {
@@ -421,6 +580,7 @@ function deleteSelected() {
     canvas.discardActiveObject();
     objs.forEach(o => canvas.remove(o));
     isDirty = true;
+    hideObjActions();
     showToast(`Deleted ${objs.length} object${objs.length > 1 ? 's' : ''}`);
 }
 
@@ -452,14 +612,15 @@ function handleImageUpload(e) {
 }
 
 // ─── Signature ───
+// Two-step: first user clicks where to place, then draws
+let _pendingSigCenter = null;
+
 function openSignatureModal() {
-    openModal('sig-modal');
-    if (!sigCanvas) {
-        sigCanvas = new fabric.Canvas('sig-canvas', { isDrawingMode: true });
-        sigCanvas.freeDrawingBrush.width = 3;
-        sigCanvas.freeDrawingBrush.color = '#000000';
-    }
-    sigCanvas.clear();
+    if (!pdfDoc) { showToast('Open a PDF first'); return; }
+    // Step 1: enter placement mode
+    setTool('sig-place');
+    canvas.defaultCursor = 'crosshair';
+    showToast('Click on the PDF where you want to place your signature');
 }
 
 function clearSignature() { if (sigCanvas) sigCanvas.clear(); }
@@ -467,23 +628,33 @@ function clearSignature() { if (sigCanvas) sigCanvas.clear(); }
 function saveSignature() {
     if (!sigCanvas || !sigCanvas.getObjects().length) { closeModal('sig-modal'); return; }
     fabric.Image.fromURL(sigCanvas.toDataURL('image/png'), img => {
-        img.scaleToWidth(Math.min(180, canvas.width * 0.35));
-        img.set({ left: canvas.width/2, top: canvas.height * 0.75, originX: 'center', originY: 'center' });
-        canvas.add(img); canvas.setActiveObject(img);
-        setTool('pan'); isDirty = true;
+        const targetW = Math.min(180, canvas.width * 0.35);
+        img.scaleToWidth(targetW);
+
+        if (_pendingSigCenter) {
+            img.set({ left: _pendingSigCenter.x, top: _pendingSigCenter.y, originX: 'center', originY: 'center' });
+            _pendingSigCenter = null;
+        } else {
+            img.set({ left: canvas.width/2, top: canvas.height * 0.75, originX: 'center', originY: 'center' });
+        }
+
+        canvas.add(img);
+        canvas.setActiveObject(img);
+        setTool('pan');
+        isDirty = true;
         closeModal('sig-modal');
-        showToast('Signature added ✓');
+        showToast('Signature placed ✓');
     });
 }
 
 // ─── Stamps ───
 const STAMPS = [
-    { label: 'APPROVED', bg: '#16a34a', color: 'white' },
-    { label: 'REJECTED', bg: '#dc2626', color: 'white' },
-    { label: 'DRAFT',    bg: '#ca8a04', color: 'white' },
-    { label: 'CONFIDENTIAL', bg: '#7c3aed', color: 'white' },
-    { label: 'REVIEWED', bg: '#0284c7', color: 'white' },
-    { label: 'SIGNED',   bg: '#0f766e', color: 'white' },
+    { label: 'APPROVED',     bg: '#16a34a' },
+    { label: 'REJECTED',     bg: '#dc2626' },
+    { label: 'DRAFT',        bg: '#ca8a04' },
+    { label: 'CONFIDENTIAL', bg: '#7c3aed' },
+    { label: 'REVIEWED',     bg: '#0284c7' },
+    { label: 'SIGNED',       bg: '#0f766e' },
 ];
 
 function insertStamp() {
@@ -492,12 +663,9 @@ function insertStamp() {
     grid.innerHTML = '';
     STAMPS.forEach(s => {
         const btn = document.createElement('button');
-        btn.style.cssText = `
-            background:${s.bg}22;border:2px solid ${s.bg}66;color:${s.bg};
-            border-radius:10px;padding:12px 8px;font-weight:700;font-size:12px;
-            letter-spacing:1px;cursor:pointer;font-family:var(--font-display);
-            transition:all 0.2s;
-        `;
+        btn.style.cssText = `background:${s.bg}22;border:2px solid ${s.bg}66;color:${s.bg};
+            border-radius:10px;padding:12px 8px;font-weight:700;font-size:12px;letter-spacing:1px;
+            cursor:pointer;font-family:var(--font-display);transition:all 0.2s;`;
         btn.textContent = s.label;
         btn.onmouseenter = () => btn.style.background = s.bg + '33';
         btn.onmouseleave = () => btn.style.background = s.bg + '22';
@@ -505,19 +673,11 @@ function insertStamp() {
             const text = new fabric.Text(s.label, {
                 left: canvas.width/2, top: canvas.height/2,
                 originX: 'center', originY: 'center',
-                fill: s.bg,
-                fontSize: 36,
-                fontFamily: 'Impact',
-                fontWeight: 'bold',
-                opacity: 0.8,
-                stroke: s.bg,
-                strokeWidth: 1,
-                angle: -15,
+                fill: s.bg, fontSize: 36, fontFamily: 'Impact',
+                opacity: 0.8, stroke: s.bg, strokeWidth: 1, angle: -15,
             });
-            canvas.add(text);
-            canvas.setActiveObject(text);
-            setTool('pan');
-            isDirty = true;
+            canvas.add(text); canvas.setActiveObject(text);
+            setTool('pan'); isDirty = true;
             closeModal('stamp-modal');
             showToast(`${s.label} stamp added`);
         };
@@ -537,7 +697,6 @@ async function executeExport() {
     showLoader('Exporting...');
     const name   = document.getElementById('export-name').value || 'Edited_Document';
     const format = document.getElementById('export-format').value;
-
     await new Promise(r => setTimeout(r, 50));
 
     if (format === 'png') {
@@ -549,44 +708,39 @@ async function executeExport() {
     } else {
         pageStates[pageNum] = JSON.stringify(canvas);
         let pdf = null;
-
         for (let i = 1; i <= pdfDoc.numPages; i++) {
             const page = await pdfDoc.getPage(i);
-            const vp = page.getViewport({ scale: 2 });
-            const tmp = document.createElement('canvas');
+            const vp   = page.getViewport({ scale: 2 });
+            const tmp  = document.createElement('canvas');
             tmp.width = vp.width; tmp.height = vp.height;
             await page.render({ canvasContext: tmp.getContext('2d'), viewport: vp }).promise;
-
             const sc = new fabric.StaticCanvas(null, { width: vp.width, height: vp.height });
             await new Promise(res => {
-                const bg = new fabric.Image(tmp);
-                sc.setBackgroundImage(bg, () => {
+                sc.setBackgroundImage(new fabric.Image(tmp), () => {
                     if (pageStates[i]) sc.loadFromJSON(pageStates[i], () => { sc.renderAll(); res(); });
                     else res();
                 });
             });
-
             const imgData = sc.toDataURL('image/jpeg', 0.85);
-            const orient = vp.width > vp.height ? 'l' : 'p';
+            const orient  = vp.width > vp.height ? 'l' : 'p';
             if (i === 1) pdf = new jsPDF({ orientation: orient, unit: 'px', format: [vp.width, vp.height] });
             else pdf.addPage([vp.width, vp.height], orient);
             pdf.addImage(imgData, 'JPEG', 0, 0, vp.width, vp.height);
         }
-
         const blob = pdf.output('blob');
         const url  = URL.createObjectURL(blob);
         const a    = document.createElement('a');
         a.href = url; a.download = name + '.pdf';
-        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(url), 1000);
         showToast('PDF saved ✓');
     }
-
     isDirty = false;
     hideLoader();
 }
 
-// keyboard shortcuts
+// ─── Keyboard shortcuts ───
 document.addEventListener('keydown', e => {
     if (currentScreen !== 'editor') return;
     if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
@@ -595,7 +749,7 @@ document.addEventListener('keydown', e => {
         if (!canvas.getActiveObject()?.isEditing) { e.preventDefault(); deleteSelected(); }
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'd') { e.preventDefault(); duplicateSelected(); }
-    if (e.key === 'ArrowLeft') changePage(-1);
+    if (e.key === 'ArrowLeft')  changePage(-1);
     if (e.key === 'ArrowRight') changePage(1);
 });
 
@@ -630,43 +784,39 @@ async function renderOrganizeGrid() {
     const grid = document.getElementById('thumbnail-grid');
     grid.innerHTML = '';
     for (let i = 0; i < orgPageArray.length; i++) {
-        const page = await orgPdfJsDoc.getPage(orgPageArray[i] + 1);
-        const vp   = page.getViewport({ scale: 0.3 });
+        const page   = await orgPdfJsDoc.getPage(orgPageArray[i] + 1);
+        const vp     = page.getViewport({ scale: 0.3 });
         const fullVP = page.getViewport({ scale: 1.2 });
 
         const wrap = document.createElement('div');
         wrap.className = 'thumb-card';
 
-        // Badge
         const badge = document.createElement('div');
         badge.className = 'thumb-badge';
         badge.textContent = i + 1;
         wrap.appendChild(badge);
 
-        // Thumbnail canvas
         const tc = document.createElement('canvas');
         tc.width = vp.width; tc.height = vp.height;
         tc.style.borderRadius = '6px';
         await page.render({ canvasContext: tc.getContext('2d'), viewport: vp }).promise;
         wrap.appendChild(tc);
 
-        // Preview popup
         const preview = document.createElement('div');
         preview.className = 'preview-popup';
         const pc = document.createElement('canvas');
         pc.width = fullVP.width; pc.height = fullVP.height;
-        pc.style.maxWidth = '75vw'; pc.style.maxHeight = '65vh'; pc.style.objectFit = 'contain';
+        pc.style.maxWidth = '75vw'; pc.style.maxHeight = '65vh';
         page.render({ canvasContext: pc.getContext('2d'), viewport: fullVP });
         preview.appendChild(pc);
         wrap.appendChild(preview);
 
-        // Controls
         const controls = document.createElement('div');
         controls.className = 'thumb-controls';
         controls.innerHTML = `
-            <button class="thumb-ctrl-btn" onclick="movePage(${i},-1)" title="Move left">◀</button>
-            <button class="thumb-ctrl-btn del" onclick="deletePage(${i})" title="Delete page">✕</button>
-            <button class="thumb-ctrl-btn" onclick="movePage(${i},1)" title="Move right">▶</button>
+            <button class="thumb-ctrl-btn" onclick="movePage(${i},-1)">◀</button>
+            <button class="thumb-ctrl-btn del" onclick="deletePage(${i})">✕</button>
+            <button class="thumb-ctrl-btn" onclick="movePage(${i},1)">▶</button>
         `;
         wrap.appendChild(controls);
         grid.appendChild(wrap);
@@ -724,15 +874,13 @@ document.getElementById('upload-merge').addEventListener('change', e => {
 
 function formatBytes(bytes) {
     if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+    if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+    return (bytes/1024/1024).toFixed(1) + ' MB';
 }
 
 function renderMergeList() {
     const list = document.getElementById('merge-list');
     list.innerHTML = '';
-    if (!mergeFiles.length) return;
-
     mergeFiles.forEach((file, i) => {
         const item = document.createElement('div');
         item.className = 'merge-item';
@@ -746,7 +894,7 @@ function renderMergeList() {
             </div>
             <div class="merge-controls">
                 <button class="btn btn-ghost" onclick="moveMergeFile(${i},-1)" style="padding:5px 8px">🔼</button>
-                <button class="btn btn-ghost" onclick="moveMergeFile(${i},1)" style="padding:5px 8px">🔽</button>
+                <button class="btn btn-ghost" onclick="moveMergeFile(${i},1)"  style="padding:5px 8px">🔽</button>
                 <button class="btn btn-danger" onclick="removeMergeFile(${i})" style="padding:5px 10px">✕</button>
             </div>
         `;
@@ -798,7 +946,6 @@ document.getElementById('upload-split').addEventListener('change', async e => {
         showLoader('Loading pages...');
         document.getElementById('split-upload-box').style.display = 'none';
         isDirty = false;
-
         const ab = await readFileAsArrayBuffer(file);
         orgPdfDoc   = await PDFLib.PDFDocument.load(ab);
         orgPdfJsDoc = await pdfjsLib.getDocument(new Uint8Array(ab)).promise;
@@ -806,10 +953,9 @@ document.getElementById('upload-split').addEventListener('change', async e => {
 
         const grid = document.getElementById('split-grid');
         grid.innerHTML = '';
-
         for (let i = 0; i < orgPdfJsDoc.numPages; i++) {
-            const page = await orgPdfJsDoc.getPage(i + 1);
-            const vp   = page.getViewport({ scale: 0.3 });
+            const page   = await orgPdfJsDoc.getPage(i + 1);
+            const vp     = page.getViewport({ scale: 0.3 });
             const fullVP = page.getViewport({ scale: 1.2 });
 
             const wrap = document.createElement('div');
@@ -848,7 +994,6 @@ document.getElementById('upload-split').addEventListener('change', async e => {
                 }
                 updateSplitCount();
             };
-
             grid.appendChild(wrap);
         }
         showToast(orgPdfJsDoc.numPages + ' pages loaded — tap to select');
@@ -864,24 +1009,18 @@ document.getElementById('upload-split').addEventListener('change', async e => {
 
 function updateSplitCount() {
     const n = splitSelectedPages.size;
-    // Update extract button text dynamically
     const btn = document.querySelector('#header-actions .btn-success');
     if (btn) btn.textContent = n > 0 ? `✂️ Extract (${n})` : '✂️ Extract';
 }
 
 function selectAllSplitPages() {
-    const grid = document.getElementById('split-grid');
+    const grid  = document.getElementById('split-grid');
     const cards = grid.querySelectorAll('.thumb-card');
     const allSelected = splitSelectedPages.size === cards.length;
-
     splitSelectedPages.clear();
     cards.forEach((card, i) => {
-        if (!allSelected) {
-            splitSelectedPages.add(i);
-            card.classList.add('selected');
-        } else {
-            card.classList.remove('selected');
-        }
+        if (!allSelected) { splitSelectedPages.add(i); card.classList.add('selected'); }
+        else card.classList.remove('selected');
     });
     updateSplitCount();
     showToast(allSelected ? 'All deselected' : `All ${cards.length} pages selected`);
@@ -913,32 +1052,31 @@ function triggerDownload(bytes, name) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-// ─── Expose all functions to global scope ───
-// Required because the script loads with `defer` — inline onclick=""
-// handlers need window-level access to these functions.
-window.navTo              = navTo;
-window.attemptNavHome     = attemptNavHome;
-window.confirmNavHome     = confirmNavHome;
-window.closeModal         = closeModal;
-window.openModal          = openModal;
-window.openSaveModal      = openSaveModal;
-window.openExportModal    = openExportModal;
-window.executeExport      = executeExport;
-window.setTool            = setTool;
-window.setZoom            = setZoom;
-window.resetZoom          = resetZoom;
-window.changePage         = changePage;
-window.deleteSelected     = deleteSelected;
-window.duplicateSelected  = duplicateSelected;
-window.insertStamp        = insertStamp;
-window.openSignatureModal = openSignatureModal;
-window.clearSignature     = clearSignature;
-window.saveSignature      = saveSignature;
-window.handleImageUpload  = handleImageUpload;
-window.movePage           = movePage;
-window.deletePage         = deletePage;
-window.moveMergeFile      = moveMergeFile;
-window.removeMergeFile    = removeMergeFile;
-window.selectAllSplitPages= selectAllSplitPages;
-window.undo               = undo;
-window.redo               = redo;
+// ─── Expose all to window (needed because script loads with defer) ───
+window.navTo               = navTo;
+window.attemptNavHome      = attemptNavHome;
+window.confirmNavHome      = confirmNavHome;
+window.closeModal          = closeModal;
+window.openModal           = openModal;
+window.openSaveModal       = openSaveModal;
+window.openExportModal     = openExportModal;
+window.executeExport       = executeExport;
+window.setTool             = setTool;
+window.setZoom             = setZoom;
+window.resetZoom           = resetZoom;
+window.changePage          = changePage;
+window.deleteSelected      = deleteSelected;
+window.duplicateSelected   = duplicateSelected;
+window.insertStamp         = insertStamp;
+window.openSignatureModal  = openSignatureModal;
+window.clearSignature      = clearSignature;
+window.saveSignature       = saveSignature;
+window.handleImageUpload   = handleImageUpload;
+window.movePage            = movePage;
+window.deletePage          = deletePage;
+window.moveMergeFile       = moveMergeFile;
+window.removeMergeFile     = removeMergeFile;
+window.selectAllSplitPages = selectAllSplitPages;
+window.undo                = undo;
+window.redo                = redo;
+window.updateStyle         = updateStyle;
