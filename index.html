@@ -410,14 +410,16 @@
             height: 48px;
             background: var(--surface);
             border-bottom: 1px solid var(--border);
-            display: flex;
+            display: none;
             align-items: center;
             gap: 8px;
             padding: 0 12px;
             overflow-x: auto;
             z-index: 40;
             flex-shrink: 0;
+            transition: opacity 0.15s;
         }
+        #prop-bar.visible { display: flex; }
 
         .prop-divider { width: 1px; height: 20px; background: var(--border); flex-shrink: 0; margin: 0 4px; }
 
@@ -457,13 +459,16 @@
 
         #workspace {
             position: absolute;
-            top: 48px;
+            top: 0;
             bottom: 76px;
             left: 0; right: 0;
             overflow: auto;
             background: #0d0d14;
-            padding: 20px;
+            padding: 24px 24px 40px;
             z-index: 30;
+        }
+        #workspace.prop-visible {
+            top: 48px;
         }
 
         #editor-placeholder {
@@ -494,9 +499,14 @@
             display: none;
             background: white;
             box-shadow: 0 30px 80px rgba(0,0,0,0.5);
-            transform-origin: top left;
-            position: absolute;
-            top: 0; left: 0;
+            transform-origin: top center;
+        }
+
+        #scroll-spacer {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 100%;
         }
 
         /* ─── Toolbar ─── */
@@ -1004,7 +1014,7 @@
             <div style="font-family: var(--font-display); font-size: 15px; font-weight: 600;">Open a PDF to start editing</div>
             <div style="font-size: 13px; color: var(--text-dim);">Tap the Open button above</div>
         </div>
-        <div id="scroll-spacer" style="position:relative;">
+        <div id="scroll-spacer">
             <div id="canvas-wrapper">
                 <canvas id="main-canvas"></canvas>
             </div>
@@ -1062,6 +1072,10 @@
         <button class="tool-btn" onclick="undo()">
             <span class="t-icon" style="font-size:16px;">↩</span>
             <span class="t-label">Undo</span>
+        </button>
+        <button class="tool-btn" onclick="redo()">
+            <span class="t-icon" style="font-size:16px;">↪</span>
+            <span class="t-label">Redo</span>
         </button>
     </div>
 </div>

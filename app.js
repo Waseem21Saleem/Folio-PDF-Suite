@@ -144,6 +144,7 @@ let undoStack = [], redoStack = [];
 
 // ─── Undo system ───
 function pushUndo() {
+    if (_suppressUndo) return;
     undoStack.push(JSON.stringify(canvas));
     if (undoStack.length > 30) undoStack.shift();
     redoStack = [];
@@ -153,9 +154,21 @@ function undo() {
     if (!undoStack.length) { showToast('Nothing to undo'); return; }
     redoStack.push(JSON.stringify(canvas));
     const state = undoStack.pop();
-    canvas.loadFromJSON(state, () => canvas.renderAll());
+    _suppressUndo = true;
+    canvas.loadFromJSON(state, () => { canvas.renderAll(); _suppressUndo = false; });
     isDirty = true;
 }
+
+function redo() {
+    if (!redoStack.length) { showToast('Nothing to redo'); return; }
+    undoStack.push(JSON.stringify(canvas));
+    const state = redoStack.pop();
+    _suppressUndo = true;
+    canvas.loadFromJSON(state, () => { canvas.renderAll(); _suppressUndo = false; });
+    isDirty = true;
+}
+
+let _suppressUndo = false;
 
 canvas.on('object:added',   () => { isDirty = true; pushUndo(); });
 canvas.on('object:modified',() => { isDirty = true; pushUndo(); });
@@ -169,6 +182,9 @@ canvas.on('path:created', function(opt) {
 });
 
 // ─── Tool management ───
+// Tools that need the color/size/font prop bar
+const TOOLS_WITH_PROPS = new Set(['text', 'pen', 'highlighter', 'shape']);
+
 function setTool(tool) {
     activeTool = tool;
     document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
@@ -178,6 +194,14 @@ function setTool(tool) {
     canvas.isDrawingMode = (tool === 'pen' || tool === 'highlighter');
     canvas.selection = (tool === 'pan');
     canvas.defaultCursor = tool === 'pan' ? 'grab' : tool === 'text' ? 'text' : 'crosshair';
+
+    // Show/hide prop bar and adjust workspace
+    const propBar  = document.getElementById('prop-bar');
+    const ws       = document.getElementById('workspace');
+    const showProp = TOOLS_WITH_PROPS.has(tool);
+    propBar.classList.toggle('visible', showProp);
+    ws.classList.toggle('prop-visible', showProp);
+
     updateStyle();
 }
 
@@ -252,7 +276,16 @@ canvas.on('mouse:move', function(opt) {
     }
 });
 
-canvas.on('mouse:up', () => { isDragging = false; if (activeTool === 'pan') canvas.defaultCursor = 'grab'; });
+canvas.on('mouse:up', () => {
+    isDragging = false;
+    if (activeTool === 'pan') canvas.defaultCursor = 'grab';
+    workspace.style.overflow = 'auto';
+});
+
+// When user starts moving/scaling a fabric object, lock workspace scroll
+canvas.on('object:moving',  () => { workspace.style.overflow = 'hidden'; });
+canvas.on('object:scaling', () => { workspace.style.overflow = 'hidden'; });
+canvas.on('object:rotating',() => { workspace.style.overflow = 'hidden'; });
 canvas.on('selection:created', syncToolbar);
 canvas.on('selection:updated', syncToolbar);
 canvas.on('text:editing:entered', syncToolbar);
@@ -263,8 +296,19 @@ function syncToolbar() {
         document.getElementById('colorPicker').value = active.fill || '#000000';
         document.getElementById('sizePicker').value = active.fontSize || 20;
         document.getElementById('fontFamily').value = active.fontFamily || 'Arial';
+        // Show prop bar when a text object is selected
+        document.getElementById('prop-bar').classList.add('visible');
+        document.getElementById('workspace').classList.add('prop-visible');
     }
 }
+
+canvas.on('selection:cleared', () => {
+    // Hide prop bar when nothing is selected and not in a drawing tool
+    if (!TOOLS_WITH_PROPS.has(activeTool)) {
+        document.getElementById('prop-bar').classList.remove('visible');
+        document.getElementById('workspace').classList.remove('prop-visible');
+    }
+});
 
 // ─── Load PDF ───
 document.getElementById('upload-pdf').addEventListener('change', async (e) => {
@@ -329,8 +373,10 @@ function updateZoomDisplay() {
     const spacer  = document.getElementById('scroll-spacer');
     wrapper.style.transform = `scale(${currentZoom})`;
     if (canvas) {
-        spacer.style.width  = `${canvas.width  * currentZoom}px`;
-        spacer.style.height = `${canvas.height * currentZoom}px`;
+        // The spacer needs to be as wide/tall as the scaled canvas so scrolling works
+        // Canvas is centered via flexbox in scroll-spacer, so only height matters for scroll
+        spacer.style.height = `${canvas.height * currentZoom + 48}px`;
+        spacer.style.minWidth = '100%';
     }
     canvas.calcOffset();
 }
@@ -543,7 +589,8 @@ async function executeExport() {
 // keyboard shortcuts
 document.addEventListener('keydown', e => {
     if (currentScreen !== 'editor') return;
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
     if (e.key === 'Delete' || e.key === 'Backspace') {
         if (!canvas.getActiveObject()?.isEditing) { e.preventDefault(); deleteSelected(); }
     }
@@ -894,3 +941,4 @@ window.moveMergeFile      = moveMergeFile;
 window.removeMergeFile    = removeMergeFile;
 window.selectAllSplitPages= selectAllSplitPages;
 window.undo               = undo;
+window.redo               = redo;
