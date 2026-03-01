@@ -85,12 +85,12 @@ function navTo(screenId) {
     if (screenId === 'home') { header.classList.remove('visible'); return; }
     header.classList.add('visible');
 
-    const transferBtn = `<button onclick="openTransferModal()" class="btn btn-primary" style="background:var(--surface3);color:var(--text);border:1px solid var(--border);">📤 <span class="btn-label">Send To</span></button>`;
+    const transferBtn = `<button onclick="openTransferModal()" class="btn btn-ghost">📤 <span class="btn-label">Send To</span></button>`;
 
     if (screenId === 'editor') {
         title.innerText = 'Edit PDF';
         actions.innerHTML = `
-            <button onclick="document.getElementById('upload-pdf').click()" class="btn btn-ghost">📂 Open PDF</button>
+            <button onclick="document.getElementById('upload-pdf').click()" class="btn btn-ghost">📂 <span class="btn-label">Open PDF</span></button>
             <div class="page-nav">
                 <button onclick="changePage(-1)" id="prev-btn" disabled>◀</button>
                 <span id="page-info">—</span>
@@ -125,6 +125,8 @@ function navTo(screenId) {
 }
 
 function openTransferModal() {
+    document.querySelectorAll('.transfer-opt').forEach(btn => btn.style.display = 'flex');
+    document.getElementById('transfer-' + currentScreen).style.display = 'none';
     openModal('transfer-modal');
 }
 
@@ -155,9 +157,6 @@ async function generatePdfBytesFromEditor() {
 }
 
 async function executeTransfer(targetScreen) {
-    if (targetScreen === currentScreen) { closeModal('transfer-modal'); return; }
-
-    // Quick validations
     if (currentScreen === 'editor' && !pdfDoc) return showToast("Open a PDF first");
     if (currentScreen === 'organize' && (!orgPdfDoc || !orgPageArray.length)) return showToast("Open a PDF first");
     if (currentScreen === 'split' && (!orgPdfDoc || !splitSelectedPages.size)) return showToast("Select pages to extract first");
@@ -243,7 +242,6 @@ function openSaveModal(action) {
     };
 }
 
-
 // ══════════════════════════════════════════
 // MODULE 1: PDF EDITOR
 // ══════════════════════════════════════════
@@ -271,7 +269,6 @@ function pushUndo() {
     if (undoStack.length > 40) undoStack.shift();
     redoStack = [];
 }
-
 function undo() {
     if (!undoStack.length) { showToast('Nothing to undo'); return; }
     _suppressUndo = true;
@@ -279,7 +276,6 @@ function undo() {
     canvas.loadFromJSON(undoStack.pop(), () => { canvas.renderAll(); _suppressUndo = false; hideObjActions(); });
     isDirty = true;
 }
-
 function redo() {
     if (!redoStack.length) { showToast('Nothing to redo'); return; }
     _suppressUndo = true;
@@ -293,10 +289,7 @@ canvas.on('object:modified', () => { isDirty = true; pushUndo(); });
 canvas.on('object:removed',  () => { isDirty = true; pushUndo(); });
 canvas.on('path:created', function(opt) {
     isDirty = true;
-    if (activeTool === 'highlighter') {
-        opt.path.globalCompositeOperation = 'multiply';
-        canvas.renderAll();
-    }
+    if (activeTool === 'highlighter') { opt.path.globalCompositeOperation = 'multiply'; canvas.renderAll(); }
 });
 
 function updateMainColor(hex) {
@@ -440,10 +433,11 @@ let isTextScanningMode = false;
 function activateTextScan() {
     isTextScanningMode = true;
     canvas.defaultCursor = 'crosshair';
-    showToast('Drag a box over text to scan style');
+    showToast('Click exactly on the PDF text to scan style');
     hideToolBubble();
 }
 
+// ─── Zoom & Page Navigation ───
 function applyZoom() {
     const wrapper = document.getElementById('canvas-wrapper');
     const spacer  = document.getElementById('scroll-spacer');
@@ -514,7 +508,6 @@ workspace.addEventListener('wheel', (e) => {
 
 // ─── Drag, Scan, Text, Shape logic ───
 let isDragging = false, lastPosX, lastPosY;
-let isScanning = false, scanStartX = 0, scanStartY = 0, scanRectOverlay = null;
 
 function setManipulating(val) {
     if (val) workspace.style.overflow = 'hidden';
@@ -524,8 +517,13 @@ function setManipulating(val) {
 canvas.on('mouse:down', function(opt) {
     const ptr = canvas.getPointer(opt.e);
 
+    if (isTextScanningMode) {
+        executeClickScan(ptr.x, ptr.y);
+        return;
+    }
+
     if (activeTool === 'pan') {
-        if (opt.target) return; 
+        if (opt.target) { setManipulating(true); return; }
         if (!opt.e.touches || opt.e.touches.length === 1) {
             isDragging = true;
             canvas.defaultCursor = 'grabbing';
@@ -533,19 +531,6 @@ canvas.on('mouse:down', function(opt) {
             lastPosY = opt.e.clientY ?? opt.e.touches?.[0].clientY;
         }
     } else if (activeTool === 'text') {
-        if (isTextScanningMode) {
-            isScanning = true;
-            scanStartX = ptr.x;
-            scanStartY = ptr.y;
-            scanRectOverlay = new fabric.Rect({
-                left: ptr.x, top: ptr.y, width: 0, height: 0,
-                fill: 'rgba(108,99,255,0.3)', stroke: '#6c63ff', strokeWidth: 1,
-                selectable: false, evented: false
-            });
-            canvas.add(scanRectOverlay);
-            return;
-        }
-
         if (opt.target?.type === 'i-text') return;
         const isBold = document.getElementById('btn-bold').classList.contains('active');
         const isItalic = document.getElementById('btn-italic').classList.contains('active');
@@ -595,16 +580,7 @@ canvas.on('mouse:down', function(opt) {
 });
 
 canvas.on('mouse:move', function(opt) {
-    if (isScanning && scanRectOverlay) {
-        const ptr = canvas.getPointer(opt.e);
-        scanRectOverlay.set({
-            width: Math.abs(ptr.x - scanStartX),
-            height: Math.abs(ptr.y - scanStartY),
-            left: Math.min(ptr.x, scanStartX),
-            top: Math.min(ptr.y, scanStartY)
-        });
-        canvas.renderAll();
-    } else if (isDragging && activeTool === 'pan') {
+    if (isDragging && activeTool === 'pan') {
         const e  = opt.e;
         const cx = e.clientX ?? e.touches?.[0].clientX;
         const cy = e.clientY ?? e.touches?.[0].clientY;
@@ -618,26 +594,12 @@ canvas.on('mouse:move', function(opt) {
 
 canvas.on('mouse:up', () => {
     isDragging = false;
+    setManipulating(false);
     if (activeTool === 'pan') canvas.defaultCursor = 'grab';
-
-    if (isScanning && scanRectOverlay) {
-        isScanning = false;
-        let bounds = scanRectOverlay.getBoundingRect();
-        canvas.remove(scanRectOverlay);
-        scanRectOverlay = null;
-
-        if (bounds.width < 5 || bounds.height < 5) {
-            showToast("Please drag a box over the text to scan");
-            isTextScanningMode = false;
-            canvas.defaultCursor = 'text';
-            showToolBubble('text');
-            return;
-        }
-        executeScan(bounds);
-    }
 });
 
-function executeScan(bounds) {
+// Single-Click Scanner Executor
+function executeClickScan(x, y) {
     if (!currentPageTextContent || !currentRawViewport || !bgCanvasData) {
         showToast("PDF data not available"); return;
     }
@@ -646,48 +608,37 @@ function executeScan(bounds) {
     let detectedSize = 20;
     let foundText = false;
 
-    let pdfYTop = currentRawViewport.height - bounds.top;
-    let pdfYBot = currentRawViewport.height - (bounds.top + bounds.height);
+    let pdfY = currentRawViewport.height - y;
 
-    let maxFontSize = 0;
     for (let item of currentPageTextContent.items) {
         let tx = item.transform[4];
         let ty = item.transform[5];
         let th = Math.abs(item.transform[0]);
         let tw = item.width;
 
-        let cx = tx + tw / 2;
-        let cy = ty + th / 2;
-
-        if (cx >= bounds.left && cx <= bounds.left + bounds.width && cy >= pdfYBot && cy <= pdfYTop) {
-            if (th > maxFontSize) {
-                maxFontSize = th;
-                detectedSize = Math.round(th);
-                let fontStr = item.fontName.toLowerCase();
-                if (fontStr.includes('serif') || fontStr.includes('times')) detectedFont = 'Georgia';
-                else if (fontStr.includes('mono') || fontStr.includes('courier')) detectedFont = 'Courier New';
-                else detectedFont = 'Arial';
-                foundText = true;
-            }
+        if (x >= tx - 10 && x <= tx + tw + 10 && pdfY >= ty - th * 0.5 && pdfY <= ty + th * 1.5) {
+            detectedSize = Math.round(th);
+            let fontStr = item.fontName.toLowerCase();
+            if (fontStr.includes('serif') || fontStr.includes('times')) detectedFont = 'Georgia';
+            else if (fontStr.includes('mono') || fontStr.includes('courier')) detectedFont = 'Courier New';
+            else detectedFont = 'Arial';
+            foundText = true;
+            break;
         }
     }
 
     let detectedColor = "#000000";
     try {
-        let shrink = 0.2; 
-        let sx = (bounds.left + bounds.width * shrink) * PDF_QUALITY;
-        let sy = (bounds.top + bounds.height * shrink) * PDF_QUALITY;
-        let sw = Math.max(1, (bounds.width * (1 - shrink*2)) * PDF_QUALITY);
-        let sh = Math.max(1, (bounds.height * (1 - shrink*2)) * PDF_QUALITY);
-        
-        let imgData = bgCanvasData.getImageData(sx, sy, sw, sh).data;
+        let sx = Math.max(0, (x - 1) * PDF_QUALITY);
+        let sy = Math.max(0, (y - 1) * PDF_QUALITY);
+        let imgData = bgCanvasData.getImageData(sx, sy, 3, 3).data;
         let colorCounts = {};
         let maxColor = "#000000";
         let maxCount = 0;
 
-        for(let i=0; i<imgData.length; i+=16) {
+        for(let i=0; i<imgData.length; i+=4) {
             let r = imgData[i], g = imgData[i+1], b = imgData[i+2], a = imgData[i+3];
-            if (a > 100 && (r < 230 || g < 230 || b < 230)) {
+            if (a > 100 && (r < 240 || g < 240 || b < 240)) {
                 let hex = rgbToHex(r,g,b);
                 colorCounts[hex] = (colorCounts[hex] || 0) + 1;
                 if (colorCounts[hex] > maxCount) {
@@ -706,7 +657,7 @@ function executeScan(bounds) {
         document.getElementById('sizePicker').value = detectedSize;
         document.getElementById('fontFamily').value = detectedFont;
         updateMainColor(detectedColor);
-        showToast(`Matched: ${detectedSize}px ${detectedFont}`);
+        showToast(`Scanned: ${detectedSize}px ${detectedFont}`);
     } else {
         updateMainColor(detectedColor);
         showToast(`Color picked: ${detectedColor}`);
@@ -1115,8 +1066,7 @@ async function renderOrganizeGrid() {
     for (let i = 0; i < orgPageArray.length; i++) {
         const page   = await orgPdfJsDoc.getPage(orgPageArray[i] + 1);
         const vp     = page.getViewport({ scale: 0.3 });
-        const fullVP = page.getViewport({ scale: 1.2 });
-
+        
         const wrap = document.createElement('div');
         wrap.className = 'thumb-card';
 
@@ -1134,15 +1084,15 @@ async function renderOrganizeGrid() {
         await page.render({ canvasContext: tc.getContext('2d'), viewport: vp }).promise;
         cvsWrap.appendChild(tc);
 
-        const preview = document.createElement('div');
-        preview.className = 'preview-popup';
-        const pc = document.createElement('canvas');
-        pc.width = fullVP.width; pc.height = fullVP.height;
-        pc.style.maxWidth = '75vw'; pc.style.maxHeight = '65vh';
-        page.render({ canvasContext: pc.getContext('2d'), viewport: fullVP });
-        preview.appendChild(pc);
-        cvsWrap.appendChild(preview);
-        
+        // Add isolated quickview button
+        const qvBtn = document.createElement('div');
+        qvBtn.className = 'quickview-btn';
+        qvBtn.innerHTML = '👁️';
+        qvBtn.onclick = (evt) => {
+            evt.stopPropagation();
+            showQuickView(orgPageArray[i] + 1);
+        };
+        cvsWrap.appendChild(qvBtn);
         wrap.appendChild(cvsWrap);
 
         const controls = document.createElement('div');
@@ -1155,6 +1105,15 @@ async function renderOrganizeGrid() {
         wrap.appendChild(controls);
         grid.appendChild(wrap);
     }
+}
+
+async function showQuickView(pageNum) {
+    const cvs = document.getElementById('quickview-canvas');
+    const page = await orgPdfJsDoc.getPage(pageNum);
+    const vp = page.getViewport({ scale: 1.5 });
+    cvs.width = vp.width; cvs.height = vp.height;
+    await page.render({ canvasContext: cvs.getContext('2d'), viewport: vp }).promise;
+    openModal('quickview-modal');
 }
 
 function movePage(index, dir) {
@@ -1212,6 +1171,9 @@ function formatBytes(bytes) {
     return (bytes/1024/1024).toFixed(1) + ' MB';
 }
 
+let touchDragIndex = -1;
+let touchDragElement = null;
+
 function renderMergeList() {
     const list = document.getElementById('merge-list');
     list.innerHTML = '';
@@ -1220,8 +1182,10 @@ function renderMergeList() {
     mergeFiles.forEach((file, i) => {
         const item = document.createElement('div');
         item.className = 'merge-item';
+        item.dataset.index = i;
         item.draggable = true;
 
+        // Desktop Drag and Drop
         item.ondragstart = (e) => { 
             draggedIndex = i; 
             e.dataTransfer.effectAllowed = 'move';
@@ -1282,6 +1246,70 @@ function renderMergeList() {
                 <button class="btn btn-danger" onclick="removeMergeFile(${i})" style="padding:5px 10px">✕</button>
             </div>
         `;
+        
+        // Touch Drag and Drop
+        const handle = item.querySelector('.merge-drag-handle');
+        handle.addEventListener('touchstart', (e) => {
+            touchDragIndex = i;
+            touchDragElement = item;
+            item.style.opacity = '0.5';
+            item.style.transform = 'scale(0.98)';
+        }, {passive: false});
+
+        handle.addEventListener('touchmove', (e) => {
+            if (touchDragIndex === -1) return;
+            e.preventDefault();
+            const currentY = e.touches[0].clientY;
+            
+            const elements = document.elementsFromPoint(e.touches[0].clientX, currentY);
+            const targetItem = elements.find(el => el.classList.contains('merge-item') && el !== touchDragElement);
+            
+            document.querySelectorAll('.merge-item').forEach(el => {
+                el.style.borderTop = '1px solid var(--border)';
+                el.style.borderBottom = '1px solid var(--border)';
+            });
+
+            if (targetItem) {
+                const rect = targetItem.getBoundingClientRect();
+                if (currentY < rect.top + rect.height / 2) targetItem.style.borderTop = '2px solid var(--accent)';
+                else targetItem.style.borderBottom = '2px solid var(--accent)';
+            }
+        }, {passive: false});
+
+        handle.addEventListener('touchend', (e) => {
+            if (touchDragIndex === -1) return;
+            item.style.opacity = '1';
+            item.style.transform = 'none';
+            
+            const changedTouch = e.changedTouches[0];
+            const elements = document.elementsFromPoint(changedTouch.clientX, changedTouch.clientY);
+            const targetItem = elements.find(el => el.classList.contains('merge-item') && el !== touchDragElement);
+            
+            document.querySelectorAll('.merge-item').forEach(el => {
+                el.style.borderTop = '1px solid var(--border)';
+                el.style.borderBottom = '1px solid var(--border)';
+            });
+
+            if (targetItem) {
+                const targetIndex = parseInt(targetItem.dataset.index);
+                const rect = targetItem.getBoundingClientRect();
+                const dropAfter = changedTouch.clientY > rect.top + rect.height / 2;
+                
+                let finalIndex = targetIndex;
+                if (dropAfter) finalIndex++;
+                if (touchDragIndex < finalIndex) finalIndex--;
+
+                if (touchDragIndex !== finalIndex) {
+                    const moved = mergeFiles.splice(touchDragIndex, 1)[0];
+                    mergeFiles.splice(finalIndex, 0, moved);
+                    isDirty = true;
+                    renderMergeList();
+                }
+            }
+            touchDragIndex = -1;
+            touchDragElement = null;
+        });
+
         list.appendChild(item);
     });
 }
@@ -1344,7 +1372,6 @@ async function renderSplitGrid() {
     for (let i = 0; i < orgPdfJsDoc.numPages; i++) {
         const page   = await orgPdfJsDoc.getPage(i + 1);
         const vp     = page.getViewport({ scale: 0.3 });
-        const fullVP = page.getViewport({ scale: 1.2 });
 
         const wrap = document.createElement('div');
         wrap.className = 'thumb-card';
@@ -1366,15 +1393,14 @@ async function renderSplitGrid() {
         await page.render({ canvasContext: tc.getContext('2d'), viewport: vp }).promise;
         cvsWrap.appendChild(tc);
 
-        const preview = document.createElement('div');
-        preview.className = 'preview-popup';
-        const pc = document.createElement('canvas');
-        pc.width = fullVP.width; pc.height = fullVP.height;
-        pc.style.maxWidth = '75vw'; pc.style.maxHeight = '65vh';
-        page.render({ canvasContext: pc.getContext('2d'), viewport: fullVP });
-        preview.appendChild(pc);
-        cvsWrap.appendChild(preview);
-
+        const qvBtn = document.createElement('div');
+        qvBtn.className = 'quickview-btn';
+        qvBtn.innerHTML = '👁️';
+        qvBtn.onclick = (evt) => {
+            evt.stopPropagation();
+            showQuickView(i + 1);
+        };
+        cvsWrap.appendChild(qvBtn);
         wrap.appendChild(cvsWrap);
 
         wrap.onclick = () => {
@@ -1472,3 +1498,4 @@ window.insertCustomStamp   = insertCustomStamp;
 window.activateTextScan    = activateTextScan;
 window.openTransferModal   = openTransferModal;
 window.executeTransfer     = executeTransfer;
+window.showQuickView       = showQuickView;
