@@ -77,13 +77,13 @@ function navTo(screenId) {
     if (screenId === 'editor') {
         title.innerText = 'Edit PDF';
         actions.innerHTML = `
-            <button onclick="document.getElementById('upload-pdf').click()" class="btn btn-ghost">📂 Open</button>
+            <button onclick="document.getElementById('upload-pdf').click()" class="btn btn-ghost" style="padding:7px 10px">📂</button>
             <div class="page-nav">
                 <button onclick="changePage(-1)" id="prev-btn" disabled>◀</button>
                 <span id="page-info">0/0</span>
                 <button onclick="changePage(1)" id="next-btn" disabled>▶</button>
             </div>
-            <button onclick="openExportModal()" class="btn btn-success">💾 Save</button>
+            <button onclick="openExportModal()" class="btn btn-success" style="padding:7px 10px">💾</button>
         `;
     } else if (screenId === 'organize') {
         title.innerText = 'Organize Pages';
@@ -536,19 +536,26 @@ function changePage(offset) {
 
 function updateZoomDisplay() {
     const wrapper = document.getElementById('canvas-wrapper');
-    wrapper.style.transform = `scale(${currentZoom})`;
-    // The scroll-spacer must be exactly as tall as the scaled canvas
-    // so the workspace scrollbar knows the real content height.
-    // We set the spacer height explicitly; padding-bottom in CSS adds toolbar clearance.
-    const spacer = document.getElementById('scroll-spacer');
-    if (canvas) {
-        const scaledH = canvas.height * currentZoom;
-        const scaledW = canvas.width  * currentZoom;
-        spacer.style.height   = scaledH + 'px';
-        spacer.style.minWidth = (scaledW + 48) + 'px';
-    }
-    // Recalculate fabric's offset after any layout change
-    setTimeout(() => canvas.calcOffset(), 50);
+    const spacer  = document.getElementById('scroll-spacer');
+    if (!canvas.width) return;
+
+    const scaledW = canvas.width  * currentZoom;
+    const scaledH = canvas.height * currentZoom;
+
+    // Scale the canvas visually
+    wrapper.style.transform       = `scale(${currentZoom})`;
+    wrapper.style.transformOrigin = 'top left';
+
+    // Make scroll-spacer large enough to scroll through the whole scaled canvas.
+    // Center horizontally: if scaled canvas < workspace width, add side margins.
+    const wsW = workspace.clientWidth;
+    const leftOffset = Math.max(16, (wsW - scaledW) / 2);
+    wrapper.style.marginLeft = leftOffset + 'px';
+
+    spacer.style.width    = Math.max(wsW, scaledW + leftOffset + 16) + 'px';
+    spacer.style.height   = scaledH + 'px';
+
+    setTimeout(() => canvas.calcOffset(), 30);
 }
 
 function setZoom(delta) {
