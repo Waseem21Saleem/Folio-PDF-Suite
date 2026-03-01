@@ -2,17 +2,17 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <link rel="icon" type="image/x-icon"  href="./icons/favicon.ico?v=11">
-    <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png?v=11">
-    <link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16.png?v=11">
-    <link rel="apple-touch-icon" sizes="180x180" href="./icons/favicon-180.png?v=11">
+    <link rel="icon" type="image/x-icon"  href="./icons/favicon.ico?v=12">
+    <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png?v=12">
+    <link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16.png?v=12">
+    <link rel="apple-touch-icon" sizes="180x180" href="./icons/favicon-180.png?v=12">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#0a0a0f">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <title>Folio — PDF Suite</title>
-    <link rel="manifest" href="./manifest.json?v=11">
-    <script src="./app.js?v=11" defer></script>
+    <link rel="manifest" href="./manifest.json?v=12">
+    <script src="./app.js?v=12" defer></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
     
@@ -79,7 +79,8 @@
         .feature-pill-text { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
         .feature-pill-text strong { display: block; font-size: 12px; color: var(--text); font-weight: 500; margin-bottom: 1px; }
         .creator-tag { width: 100%; max-width: 900px; text-align: center; padding: 30px 0 10px; color: var(--text-dim); font-size: 12px; font-weight: 300; letter-spacing: 0.3px; margin-top: auto; }
-        .creator-tag span { color: var(--text-muted); font-weight: 500; }
+        .creator-tag a { color: var(--text-muted); font-weight: 500; text-decoration: none; transition: color 0.2s; }
+        .creator-tag a:hover { color: var(--accent); }
 
         /* TOOL HEADER */
         #tool-header { display: none; background: var(--surface); border-bottom: 1px solid var(--border); height: var(--header-h); padding: 0 10px; justify-content: space-between; align-items: center; flex-shrink: 0; z-index: 50; gap: 8px; }
@@ -90,7 +91,7 @@
         #header-actions { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
         @media (max-width: 360px) { #header-actions .btn { font-size: 11px; padding: 6px 8px; } .page-nav span { min-width: 28px; } }
 
-        .btn { display: inline-flex; align-items: center; gap: 5px; padding: 7px 12px; border-radius: var(--radius-sm); font-family: var(--font-body); font-size: 12px; font-weight: 500; cursor: pointer; border: none; transition: all 0.18s; white-space: nowrap; }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 7px 12px; border-radius: var(--radius-sm); font-family: var(--font-body); font-size: 12px; font-weight: 500; cursor: pointer; border: none; transition: all 0.18s; white-space: nowrap; }
         .btn:disabled { opacity: 0.3; cursor: default; }
         .btn-ghost { background: var(--surface3); border: 1px solid var(--border); color: var(--text-muted); }
         .btn-primary { background: var(--accent); color: white; box-shadow: 0 3px 14px var(--accent-glow); }
@@ -118,8 +119,8 @@
         .color-rainbow { background: linear-gradient(135deg, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff); position: relative; display: flex; justify-content: center; align-items: center; }
         .color-rainbow input { opacity: 0; position: absolute; inset: 0; cursor: pointer; }
         
-        .text-format-btn { background: transparent; border: 1px solid transparent; color: var(--text-muted); width: 24px; height: 24px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 13px; }
-        .text-format-btn.active { background: rgba(108,99,255,0.2); color: var(--accent); border-color: var(--accent); }
+        .text-format-btn, .shape-opt { background: transparent; border: 1px solid transparent; color: var(--text-muted); width: 24px; height: 24px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+        .text-format-btn.active, .shape-opt.active { background: rgba(108,99,255,0.2); color: var(--accent); border-color: var(--accent); }
 
         #toolbar { position: absolute; bottom: 0; left: 0; right: 0; height: var(--toolbar-h); background: var(--surface); border-top: 1px solid var(--border); display: flex; align-items: center; gap: 0; padding: 0 4px; overflow-x: auto; overflow-y: hidden; z-index: 40; -ms-overflow-style: none; scrollbar-width: none; }
         #toolbar::-webkit-scrollbar { display: none; }
@@ -139,17 +140,23 @@
         .upload-zone h3 { font-family: var(--font-display); font-size: 16px; font-weight: 700; margin-bottom: 6px; }
         .upload-zone p { font-size: 12px; color: var(--text-muted); }
         .page-grid { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; max-width: 1200px; margin: 16px auto 0; padding-bottom: 20px; }
-        .thumb-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 10px; display: flex; flex-direction: column; align-items: center; gap: 8px; position: relative; transition: all 0.18s; cursor: pointer; }
+        .thumb-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 10px; display: flex; flex-direction: column; align-items: center; gap: 8px; position: relative; transition: all 0.18s; }
         .thumb-card:active { border-color: var(--border-strong); }
         .thumb-card.selected { border-color: var(--accent); background: rgba(108,99,255,0.08); }
-        .thumb-badge { position: absolute; top: -8px; left: -8px; width: 22px; height: 22px; background: var(--accent); color: white; border-radius: 50%; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+        .thumb-badge { position: absolute; top: -8px; left: -8px; width: 22px; height: 22px; background: var(--accent); color: white; border-radius: 50%; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; z-index: 10; }
         .thumb-card.selected .thumb-badge { background: var(--accent3); color: #0a1a16; }
+        
+        .thumb-canvas-wrap { position: relative; cursor: pointer; }
         .thumb-controls { display: flex; gap: 5px; }
         .thumb-ctrl-btn { background: var(--surface3); border: 1px solid var(--border); color: var(--text-muted); padding: 4px 8px; border-radius: 7px; font-size: 11px; cursor: pointer; }
         .thumb-ctrl-btn.del { border-color: rgba(255,71,87,0.2); color: var(--danger); }
+        
         .preview-popup { display: none; position: fixed; z-index: 300; top: 50%; left: 50%; transform: translate(-50%,-50%); background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,0.8); pointer-events: none; max-width: 80vw; max-height: 72vh; }
-        .thumb-card:hover .preview-popup { display: block; }
+        .thumb-canvas-wrap:hover .preview-popup { display: block; } /* Fixed hover trigger */
+        
         .merge-item { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+        .merge-drag-handle { cursor: grab; font-size: 20px; color: var(--text-dim); padding-right: 5px; -webkit-user-select: none; user-select: none; }
+        .merge-drag-handle:active { cursor: grabbing; }
         .merge-item-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
         .merge-item-icon { width: 30px; height: 30px; background: rgba(108,99,255,0.15); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
         .merge-item-text { min-width: 0; }
@@ -261,7 +268,7 @@
         </div>
     </div>
     
-    <div class="creator-tag">Created by <span>Waseem Saleem</span></div>
+    <div class="creator-tag">Created by <a href="https://waseemsaleem.com" target="_blank">Waseem Saleem</a></div>
 </div>
 
 <div id="tool-header">
@@ -278,10 +285,6 @@
         
         <div id="color-palette" style="display:flex; gap:6px; align-items:center;">
             <div class="color-dot selected" style="background:#000000;" onclick="selectColor(this, '#000000')"></div>
-            <div class="color-dot" style="background:#ef4444;" onclick="selectColor(this, '#ef4444')"></div>
-            <div class="color-dot" style="background:#3b82f6;" onclick="selectColor(this, '#3b82f6')"></div>
-            <div class="color-dot" style="background:#22c55e;" onclick="selectColor(this, '#22c55e')"></div>
-            <div class="color-dot" style="background:#ffffff;" onclick="selectColor(this, '#ffffff')"></div>
             <label class="color-dot color-rainbow" title="Custom Color">
                 <input type="color" id="colorPicker" value="#000000" onchange="selectColor(this.parentElement, this.value)">
             </label>
@@ -307,15 +310,12 @@
             <button id="btn-underline" class="text-format-btn" onclick="toggleTextProp('underline', true, false)" style="text-decoration:underline;">U</button>
         </div>
 
-        <div id="shape-wrap" style="display:none;align-items:center;gap:6px;">
-            <div style="width:1px;height:20px;background:var(--border);flex-shrink:0;"></div>
-            <select id="shapeType" onchange="updateStyle()"
-                style="background:var(--surface3);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:8px;font-size:12px;outline:none;font-family:var(--font-body);">
-                <option value="rect">Rectangle</option>
-                <option value="circle">Circle</option>
-                <option value="triangle">Triangle</option>
-                <option value="line">Line</option>
-            </select>
+        <div id="shape-wrap" style="display:none;align-items:center;gap:4px;">
+            <div style="width:1px;height:20px;background:var(--border);flex-shrink:0;margin:0 2px;"></div>
+            <button class="shape-opt active" onclick="selectShape(this, 'rect')">▭</button>
+            <button class="shape-opt" onclick="selectShape(this, 'circle')">◯</button>
+            <button class="shape-opt" onclick="selectShape(this, 'triangle')">△</button>
+            <button class="shape-opt" onclick="selectShape(this, 'line')">╱</button>
         </div>
 
         <div id="bubble-arrow" style="position:absolute;bottom:-7px;left:50%;transform:translateX(-50%);
@@ -435,7 +435,7 @@
 <div id="unsaved-modal" class="modal-backdrop">
     <div class="modal">
         <h3>Unsaved changes</h3>
-        <p>Going back will discard your edits. Are you sure?</p>
+        <p>This will discard your edits. Are you sure?</p>
         <div class="modal-actions">
             <button class="btn btn-ghost" onclick="closeModal('unsaved-modal')">Cancel</button>
             <button class="btn btn-danger" onclick="confirmNavHome()">Discard & Exit</button>

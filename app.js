@@ -1,9 +1,7 @@
-// ─── Service Worker ───
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
 
-// ─── PWA Install ───
 let deferredPrompt;
 window.addEventListener('beforeinstallprompt', e => {
     e.preventDefault();
@@ -21,7 +19,6 @@ document.getElementById('install-btn').addEventListener('click', async () => {
     }
 });
 
-// ─── Helpers ───
 function readFileAsArrayBuffer(file) {
     return new Promise((resolve, reject) => {
         const r = new FileReader();
@@ -54,9 +51,18 @@ function showToast(msg) {
     }, 2000);
 }
 
-// ─── Navigation ───
+// ─── Navigation & Dirty Checks ───
 let isDirty = false;
 let currentScreen = 'home';
+
+// Intercept browser refresh/exit
+window.addEventListener('beforeunload', function (e) {
+    if (isDirty) {
+        const msg = "Unsaved changes. This will discard your edits. Are you sure?";
+        e.returnValue = msg;
+        return msg;
+    }
+});
 
 function attemptNavHome() {
     if (isDirty) openModal('unsaved-modal');
@@ -93,7 +99,10 @@ function navTo(screenId) {
         `;
     } else if (screenId === 'organize') {
         title.innerText = 'Organize Pages';
-        actions.innerHTML = `<button onclick="openSaveModal('organize')" class="btn btn-success">💾 <span class="btn-label">Save</span></button>`;
+        actions.innerHTML = `
+            <button onclick="document.getElementById('upload-org').click()" class="btn btn-ghost">📂 <span class="btn-label">Change PDF</span></button>
+            <button onclick="openSaveModal('organize')" class="btn btn-success">💾 <span class="btn-label">Save</span></button>
+        `;
     } else if (screenId === 'merge') {
         title.innerText = 'Merge PDFs';
         actions.innerHTML = `
@@ -103,6 +112,7 @@ function navTo(screenId) {
     } else if (screenId === 'split') {
         title.innerText = 'Extract Pages';
         actions.innerHTML = `
+            <button onclick="document.getElementById('upload-split').click()" class="btn btn-ghost">📂 <span class="btn-label">Change</span></button>
             <button onclick="selectAllSplitPages()" class="btn btn-ghost">☑ <span class="btn-label">All</span></button>
             <button onclick="openSaveModal('split')" class="btn btn-success">✂️ <span class="btn-label">Extract</span></button>
         `;
@@ -151,7 +161,6 @@ function pushUndo() {
     if (undoStack.length > 40) undoStack.shift();
     redoStack = [];
 }
-
 function undo() {
     if (!undoStack.length) { showToast('Nothing to undo'); return; }
     _suppressUndo = true;
@@ -159,7 +168,6 @@ function undo() {
     canvas.loadFromJSON(undoStack.pop(), () => { canvas.renderAll(); _suppressUndo = false; hideObjActions(); });
     isDirty = true;
 }
-
 function redo() {
     if (!redoStack.length) { showToast('Nothing to redo'); return; }
     _suppressUndo = true;
@@ -173,10 +181,7 @@ canvas.on('object:modified', () => { isDirty = true; pushUndo(); });
 canvas.on('object:removed',  () => { isDirty = true; pushUndo(); });
 canvas.on('path:created', function(opt) {
     isDirty = true;
-    if (activeTool === 'highlighter') {
-        opt.path.globalCompositeOperation = 'multiply';
-        canvas.renderAll();
-    }
+    if (activeTool === 'highlighter') { opt.path.globalCompositeOperation = 'multiply'; canvas.renderAll(); }
 });
 
 // Color Selection
@@ -187,7 +192,7 @@ function selectColor(element, hex) {
     updateStyle();
 }
 
-// Text Formatting Toggle
+// Text Formatting
 function toggleTextProp(prop, onVal, offVal) {
     const btnMap = { 'fontWeight': 'btn-bold', 'fontStyle': 'btn-italic', 'underline': 'btn-underline' };
     const btn = document.getElementById(btnMap[prop]);
@@ -203,6 +208,14 @@ function toggleTextProp(prop, onVal, offVal) {
         canvas.renderAll();
         isDirty = true;
     }
+}
+
+// Shape Selection
+let currentShapeType = 'rect';
+function selectShape(btn, type) {
+    document.querySelectorAll('.shape-opt').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentShapeType = type;
 }
 
 const TOOLS_WITH_PROPS = new Set(['text', 'pen', 'highlighter', 'shape']);
@@ -382,6 +395,11 @@ workspace.addEventListener('wheel', (e) => {
 let isDragging = false, lastPosX, lastPosY;
 let isScanning = false, scanStartX = 0, scanStartY = 0, scanRectOverlay = null;
 
+function setManipulating(val) {
+    if (val) workspace.style.overflow = 'hidden';
+    else workspace.style.overflow = 'auto';
+}
+
 canvas.on('mouse:down', function(opt) {
     const ptr = canvas.getPointer(opt.e);
     
@@ -426,18 +444,17 @@ canvas.on('mouse:down', function(opt) {
         setTool('pan');
         setTimeout(() => { showObjActions(obj); syncToolbar(obj); }, 50);
     } else if (activeTool === 'shape') {
-        const shapeType = document.getElementById('shapeType').value;
         const color = document.getElementById('colorPicker').value;
         const strokeW = Math.max(1, parseInt(document.getElementById('sizePicker').value) / 5);
         let obj;
 
-        if (shapeType === 'rect') {
+        if (currentShapeType === 'rect') {
             obj = new fabric.Rect({ left: ptr.x-50, top: ptr.y-30, width: 100, height: 60, fill: 'transparent', stroke: color, strokeWidth: strokeW });
-        } else if (shapeType === 'circle') {
+        } else if (currentShapeType === 'circle') {
             obj = new fabric.Circle({ left: ptr.x-40, top: ptr.y-40, radius: 40, fill: 'transparent', stroke: color, strokeWidth: strokeW });
-        } else if (shapeType === 'triangle') {
+        } else if (currentShapeType === 'triangle') {
             obj = new fabric.Triangle({ left: ptr.x-40, top: ptr.y-40, width: 80, height: 80, fill: 'transparent', stroke: color, strokeWidth: strokeW });
-        } else if (shapeType === 'line') {
+        } else if (currentShapeType === 'line') {
             obj = new fabric.Line([ptr.x, ptr.y, ptr.x + 100, ptr.y], { stroke: color, strokeWidth: strokeW });
         }
 
@@ -496,7 +513,6 @@ canvas.on('mouse:up', () => {
     }
 });
 
-// Drag to Scan Executor
 function executeScan(bounds) {
     if (!currentPageTextContent || !currentRawViewport || !bgCanvasData) {
         showToast("PDF data not available"); return;
@@ -516,7 +532,6 @@ function executeScan(bounds) {
         let th = Math.abs(item.transform[0]);
         let tw = item.width;
 
-        // Check if text center is within scan box
         let cx = tx + tw / 2;
         let cy = ty + th / 2;
 
@@ -535,7 +550,7 @@ function executeScan(bounds) {
 
     let detectedColor = "#000000";
     try {
-        let shrink = 0.2; // Skip white borders
+        let shrink = 0.2; 
         let sx = (bounds.left + bounds.width * shrink) * PDF_QUALITY;
         let sy = (bounds.top + bounds.height * shrink) * PDF_QUALITY;
         let sw = Math.max(1, (bounds.width * (1 - shrink*2)) * PDF_QUALITY);
@@ -570,6 +585,8 @@ function executeScan(bounds) {
         selectColor(rainbowBtn, detectedColor);
         showToast(`Color picked: ${detectedColor}`);
     }
+    
+    // Jump straight to text tool & open bubble
     setTool('text');
 }
 
@@ -976,11 +993,14 @@ async function renderOrganizeGrid() {
         badge.textContent = i + 1;
         wrap.appendChild(badge);
 
+        const cvsWrap = document.createElement('div');
+        cvsWrap.className = 'thumb-canvas-wrap';
+
         const tc = document.createElement('canvas');
         tc.width = vp.width; tc.height = vp.height;
         tc.style.borderRadius = '6px';
         await page.render({ canvasContext: tc.getContext('2d'), viewport: vp }).promise;
-        wrap.appendChild(tc);
+        cvsWrap.appendChild(tc);
 
         const preview = document.createElement('div');
         preview.className = 'preview-popup';
@@ -989,7 +1009,9 @@ async function renderOrganizeGrid() {
         pc.style.maxWidth = '75vw'; pc.style.maxHeight = '65vh';
         page.render({ canvasContext: pc.getContext('2d'), viewport: fullVP });
         preview.appendChild(pc);
-        wrap.appendChild(preview);
+        cvsWrap.appendChild(preview);
+        
+        wrap.appendChild(cvsWrap);
 
         const controls = document.createElement('div');
         controls.className = 'thumb-controls';
@@ -1061,11 +1083,36 @@ function formatBytes(bytes) {
 function renderMergeList() {
     const list = document.getElementById('merge-list');
     list.innerHTML = '';
+    let draggedIndex = -1;
+
     mergeFiles.forEach((file, i) => {
         const item = document.createElement('div');
         item.className = 'merge-item';
+        item.draggable = true;
+
+        item.ondragstart = (e) => { 
+            draggedIndex = i; 
+            e.dataTransfer.effectAllowed = 'move';
+            item.style.opacity = '0.5';
+        };
+        item.ondragover = (e) => { 
+            e.preventDefault(); 
+            e.dataTransfer.dropEffect = 'move';
+        };
+        item.ondrop = (e) => {
+            e.preventDefault();
+            item.style.opacity = '1';
+            if (draggedIndex === -1 || draggedIndex === i) return;
+            const moved = mergeFiles.splice(draggedIndex, 1)[0];
+            mergeFiles.splice(i, 0, moved);
+            isDirty = true;
+            renderMergeList();
+        };
+        item.ondragend = () => { item.style.opacity = '1'; };
+
         item.innerHTML = `
-            <div class="merge-item-name">
+            <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:0;">
+                <div class="merge-drag-handle">≡</div>
                 <div class="merge-item-icon">📄</div>
                 <div class="merge-item-text">
                     <div class="fname">${file.name}</div>
@@ -1073,21 +1120,11 @@ function renderMergeList() {
                 </div>
             </div>
             <div class="merge-controls">
-                <button class="btn btn-ghost" onclick="moveMergeFile(${i},-1)" style="padding:5px 8px">🔼</button>
-                <button class="btn btn-ghost" onclick="moveMergeFile(${i},1)"  style="padding:5px 8px">🔽</button>
                 <button class="btn btn-danger" onclick="removeMergeFile(${i})" style="padding:5px 10px">✕</button>
             </div>
         `;
         list.appendChild(item);
     });
-}
-
-function moveMergeFile(i, dir) {
-    const ni = i + dir;
-    if (ni < 0 || ni >= mergeFiles.length) return;
-    [mergeFiles[i], mergeFiles[ni]] = [mergeFiles[ni], mergeFiles[i]];
-    isDirty = true;
-    renderMergeList();
 }
 
 function removeMergeFile(i) {
@@ -1148,11 +1185,14 @@ document.getElementById('upload-split').addEventListener('change', async e => {
             badge.textContent = i + 1;
             wrap.appendChild(badge);
 
+            const cvsWrap = document.createElement('div');
+            cvsWrap.className = 'thumb-canvas-wrap';
+
             const tc = document.createElement('canvas');
             tc.width = vp.width; tc.height = vp.height;
             tc.style.borderRadius = '6px';
             await page.render({ canvasContext: tc.getContext('2d'), viewport: vp }).promise;
-            wrap.appendChild(tc);
+            cvsWrap.appendChild(tc);
 
             const preview = document.createElement('div');
             preview.className = 'preview-popup';
@@ -1161,7 +1201,9 @@ document.getElementById('upload-split').addEventListener('change', async e => {
             pc.style.maxWidth = '75vw'; pc.style.maxHeight = '65vh';
             page.render({ canvasContext: pc.getContext('2d'), viewport: fullVP });
             preview.appendChild(pc);
-            wrap.appendChild(preview);
+            cvsWrap.appendChild(preview);
+
+            wrap.appendChild(cvsWrap);
 
             wrap.onclick = () => {
                 isDirty = true;
@@ -1259,6 +1301,7 @@ window.undo                = undo;
 window.redo                = redo;
 window.updateStyle         = updateStyle;
 window.selectColor         = selectColor;
-window.toggleTextProp       = toggleTextProp;
+window.toggleTextProp      = toggleTextProp;
+window.selectShape         = selectShape;
 window.insertStamp         = insertStamp;
 window.insertCustomStamp   = insertCustomStamp;
