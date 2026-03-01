@@ -2,17 +2,16 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <!-- Favicons - cache-busted -->
-    <link rel="icon" type="image/x-icon"  href="./icons/favicon.ico?v=3">
-    <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png?v=3">
-    <link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16.png?v=3">
-    <link rel="apple-touch-icon" sizes="180x180" href="./icons/favicon-180.png?v=3">
+    <link rel="icon" type="image/x-icon"  href="./icons/favicon.ico?v=8">
+    <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png?v=8">
+    <link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16.png?v=8">
+    <link rel="apple-touch-icon" sizes="180x180" href="./icons/favicon-180.png?v=8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#0a0a0f">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <title>Folio — PDF Suite</title>
-    <link rel="manifest" href="./manifest.json">
-    <script src="./app.js" defer></script>
+    <link rel="manifest" href="./manifest.json?v=8">
+    <script src="./app.js?v=8" defer></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
     
@@ -120,7 +119,7 @@
             flex-shrink: 0;
         }
 
-        /* Tool cards grid — 2 col on mobile, 4 on desktop */
+        /* Tool cards grid */
         .tools-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
@@ -166,7 +165,6 @@
         .tool-desc { font-size: 11px; color: var(--text-muted); line-height: 1.45; font-weight: 300; }
         .tool-arrow { position: absolute; bottom: 14px; right: 14px; font-size: 14px; color: var(--text-dim); }
 
-        /* Feature pills */
         .divider { width: 100%; max-width: 900px; height: 1px; background: var(--border); margin: 28px 0; }
         .section-title { font-family: var(--font-display); font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); width: 100%; max-width: 900px; margin-bottom: 12px; }
 
@@ -186,6 +184,15 @@
         .feature-pill-icon { font-size: 18px; flex-shrink: 0; }
         .feature-pill-text { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
         .feature-pill-text strong { display: block; font-size: 12px; color: var(--text); font-weight: 500; margin-bottom: 1px; }
+
+        /* CREATOR WATERMARK ON HOME SCREEN */
+        .creator-tag {
+            width: 100%; max-width: 900px; text-align: center;
+            padding: 30px 0 10px; color: var(--text-dim);
+            font-size: 12px; font-weight: 300; letter-spacing: 0.3px;
+            margin-top: auto; /* Pushes to bottom */
+        }
+        .creator-tag span { color: var(--text-muted); font-weight: 500; }
 
         /* ══════════════════════════
            TOOL HEADER
@@ -223,13 +230,11 @@
         #header-actions {
             display: flex; align-items: center; gap: 5px; flex-shrink: 0;
         }
-        /* On very small screens, shrink the Open PDF button */
         @media (max-width: 360px) {
             #header-actions .btn { font-size: 11px; padding: 6px 8px; }
             .page-nav span { min-width: 28px; }
         }
 
-        /* ── Buttons ── */
         .btn {
             display: inline-flex; align-items: center; gap: 5px;
             padding: 7px 12px;
@@ -244,7 +249,6 @@
         .btn-success { background: var(--accent3); color: #0a1a16; font-weight: 600; }
         .btn-danger { background: rgba(255,71,87,0.15); border: 1px solid rgba(255,71,87,0.3); color: var(--danger); }
 
-        /* Page nav */
         .page-nav {
             display: flex; align-items: center; gap: 2px;
             background: var(--surface3); border: 1px solid var(--border);
@@ -268,21 +272,14 @@
             left: 0; right: 0;
             overflow: auto;
             background: #0d0d14;
-            /* NO padding — padding breaks clientWidth measurements */
             z-index: 30;
             -webkit-overflow-scrolling: touch;
         }
-        #workspace.obj-active {
-            overflow: hidden !important;
-            touch-action: none !important;
-        }
-        .upper-canvas { touch-action: none !important; }
 
-        /* scroll-spacer: full-size flex container, centers canvas both ways */
         #scroll-spacer {
             display: flex;
-            justify-content: center;   /* horizontal center */
-            align-items: flex-start;   /* pin to top */
+            justify-content: center;
+            align-items: flex-start;
             padding: 16px;
             box-sizing: border-box;
         }
@@ -303,12 +300,10 @@
         #canvas-wrapper {
             display: none; background: white;
             box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-            /* transform-origin center so scale() keeps canvas centered */
             transform-origin: top center;
             flex-shrink: 0;
         }
 
-        /* ── Toolbar ── */
         #toolbar {
             position: absolute;
             bottom: 0; left: 0; right: 0;
@@ -399,7 +394,6 @@
         }
         .thumb-card:hover .preview-popup { display: block; }
 
-        /* Merge list */
         .merge-item {
             background: var(--surface); border: 1px solid var(--border);
             border-radius: 12px; padding: 12px 14px;
@@ -413,7 +407,7 @@
         .merge-controls { display: flex; gap: 4px; flex-shrink: 0; }
 
         /* ══════════════════════════
-           MODALS
+           MODALS & TOASTS
         ══════════════════════════ */
         .modal-backdrop {
             display: none; position: fixed; inset: 0;
@@ -443,7 +437,6 @@
         .form-input:focus { border-color: var(--accent); }
         select.form-input { border-right: 8px solid transparent; -webkit-appearance: none; }
 
-        /* Loader */
         #loader-overlay {
             display: none; position: fixed; inset: 0;
             background: rgba(10,10,15,0.88); backdrop-filter: blur(10px);
@@ -454,10 +447,8 @@
         @keyframes spin { to { transform: rotate(360deg); } }
         #loader-text { font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--text-muted); }
 
-        /* Signature canvas */
         #sig-container { background: white; border-radius: 10px; overflow: hidden; border: 2px dashed #ccc; margin-bottom: 14px; }
 
-        /* Toast - hidden when empty */
         #toast {
             position: fixed; bottom: 80px; left: 50%;
             transform: translateX(-50%) translateY(80px);
@@ -472,11 +463,9 @@
         #toast:empty { display: none; }
         #toast.show { transform: translateX(-50%) translateY(0); }
 
-        /* Responsive button labels - visible on desktop, hidden on small mobile */
         .btn-label { display: inline; }
         @media (max-width: 400px) { .btn-label { display: none; } }
 
-        /* Animations */
         @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
         .home-hero   { animation: fadeUp 0.4s ease both; }
         .tools-grid  { animation: fadeUp 0.4s 0.08s ease both; }
@@ -485,7 +474,6 @@
 </head>
 <body>
 
-<!-- ══════════════ HOME ══════════════ -->
 <div id="home-screen" class="screen active">
     <div class="home-hero">
         <div class="hero-logo">
@@ -559,18 +547,19 @@
             </div>
         </div>
     </div>
+
+    <div class="creator-tag">
+        Created by <span>Waseem Saleem</span>
+    </div>
 </div>
 
-<!-- ══════════════ TOOL HEADER ══════════════ -->
 <div id="tool-header">
     <button class="back-btn" onclick="attemptNavHome()">← <span>Back</span></button>
     <div id="tool-title"></div>
     <div id="header-actions"></div>
 </div>
 
-<!-- ══════════════ EDITOR ══════════════ -->
 <div id="editor-screen" class="screen">
-    <!-- Floating tool options bubble (shown above active toolbar button) -->
     <div id="tool-bubble" style="display:none;position:absolute;z-index:200;bottom:70px;left:50%;transform:translateX(-50%);
         background:var(--surface);border:1px solid var(--border-strong);border-radius:14px;padding:10px 14px;
         align-items:center;gap:10px;box-shadow:0 8px 32px rgba(0,0,0,0.5);white-space:nowrap;flex-wrap:nowrap;">
@@ -596,9 +585,7 @@
             border-bottom:1px solid var(--border-strong);transform:translateX(-50%) rotate(45deg);"></div>
     </div>
 
-
-
-    <div id="workspace" class="no-scroll">
+    <div id="workspace">
         <div id="editor-placeholder">
             <div class="placeholder-icon">📄</div>
             <div style="font-family: var(--font-display); font-size: 15px; font-weight: 600;">Open a PDF to start editing</div>
@@ -609,7 +596,6 @@
                 <canvas id="main-canvas"></canvas>
             </div>
         </div>
-        <!-- obj-actions lives inside workspace so it scrolls with canvas content -->
         <div id="obj-actions" style="display:none;position:absolute;z-index:100;pointer-events:auto;
             background:var(--surface);border:1px solid var(--border-strong);border-radius:10px;padding:5px 8px;
             gap:6px;align-items:center;box-shadow:0 4px 20px rgba(0,0,0,0.5);">
@@ -623,7 +609,7 @@
         </div>
     </div>
 
-    <div id="toolbar" class="no-scroll">
+    <div id="toolbar">
         <button id="tool-pan" class="tool-btn active" onclick="setTool('pan')">
             <span class="t-icon">🖐</span>
             <span class="t-label">Pan</span>
@@ -632,6 +618,10 @@
         <button id="tool-text" class="tool-btn" onclick="setTool('text')">
             <span class="t-icon">T</span>
             <span class="t-label" style="font-size:9px;">Text</span>
+        </button>
+        <button id="tool-scan" class="tool-btn" onclick="setTool('scan')">
+            <span class="t-icon" style="color: var(--accent3)">🔍</span>
+            <span class="t-label" style="color: var(--accent3)">Scan</span>
         </button>
         <button id="tool-pen" class="tool-btn" onclick="setTool('pen')">
             <span class="t-icon">🖊</span>
@@ -668,12 +658,8 @@
             <span class="t-label">Redo</span>
         </button>
     </div>
-    <div style="width:100%;max-width:900px;text-align:center;padding:24px 0 8px;color:var(--text-dim);font-size:12px;font-weight:300;letter-spacing:0.3px;">
-        Created by <span style="color:var(--text-muted);font-weight:500;">Waseem Saleem</span>
-    </div>
 </div>
 
-<!-- ══════════════ ORGANIZE ══════════════ -->
 <div id="organize-screen" class="screen">
     <div class="tool-content">
         <div id="org-upload-box" class="upload-zone" onclick="document.getElementById('upload-org').click()">
@@ -685,7 +671,6 @@
     </div>
 </div>
 
-<!-- ══════════════ MERGE ══════════════ -->
 <div id="merge-screen" class="screen">
     <div class="tool-content">
         <div class="upload-zone" onclick="document.getElementById('upload-merge').click()" style="max-width:480px;margin:0 auto 24px;">
@@ -697,7 +682,6 @@
     </div>
 </div>
 
-<!-- ══════════════ SPLIT / EXTRACT ══════════════ -->
 <div id="split-screen" class="screen">
     <div class="tool-content">
         <div id="split-upload-box" class="upload-zone" onclick="document.getElementById('upload-split').click()">
@@ -709,9 +693,6 @@
     </div>
 </div>
 
-<!-- ══════════════ MODALS ══════════════ -->
-
-<!-- Unsaved -->
 <div id="unsaved-modal" class="modal-backdrop">
     <div class="modal">
         <h3>Unsaved changes</h3>
@@ -723,13 +704,11 @@
     </div>
 </div>
 
-<!-- Loader -->
 <div id="loader-overlay">
     <div class="loader-ring"></div>
     <div id="loader-text">Processing...</div>
 </div>
 
-<!-- Save modal (organize/merge/split) -->
 <div id="save-modal" class="modal-backdrop">
     <div class="modal">
         <h3>Save as...</h3>
@@ -742,7 +721,6 @@
     </div>
 </div>
 
-<!-- Export PDF/PNG modal -->
 <div id="export-modal" class="modal-backdrop">
     <div class="modal">
         <h3>Export file</h3>
@@ -760,7 +738,6 @@
     </div>
 </div>
 
-<!-- Signature modal -->
 <div id="sig-modal" class="modal-backdrop">
     <div class="modal" style="max-width:480px;">
         <h3>Draw your signature</h3>
@@ -777,7 +754,6 @@
     </div>
 </div>
 
-<!-- Stamp modal -->
 <div id="stamp-modal" class="modal-backdrop">
     <div class="modal">
         <h3>Insert Stamp</h3>
@@ -789,7 +765,6 @@
     </div>
 </div>
 
-<!-- iOS install hint -->
 <div id="ios-install-modal" class="modal-backdrop">
     <div class="modal">
         <h3>Install Folio</h3>
@@ -800,12 +775,10 @@
     </div>
 </div>
 
-<!-- Toast -->
 <div id="toast"></div>
 
-<!-- Hidden file inputs -->
 <input type="file" id="upload-pdf"   accept="application/pdf"                  class="hidden" style="display:none">
-<input type="file" id="upload-img"   accept="image/*"                           class="hidden" style="display:none" onchange="handleImageUpload(event)">
+<input type="file" id="upload-img"   accept="image/*"                          class="hidden" style="display:none" onchange="handleImageUpload(event)">
 <input type="file" id="upload-org"   accept="application/pdf"                  class="hidden" style="display:none">
 <input type="file" id="upload-merge" accept="application/pdf" multiple         class="hidden" style="display:none">
 <input type="file" id="upload-split" accept="application/pdf"                  class="hidden" style="display:none">

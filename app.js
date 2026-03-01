@@ -30,6 +30,9 @@ function readFileAsArrayBuffer(file) {
         r.readAsArrayBuffer(file);
     });
 }
+function rgbToHex(r, g, b) {
+    return "#" + (1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1);
+}
 
 function showLoader(text = 'Processing...') {
     document.getElementById('loader-text').innerText = text;
@@ -130,14 +133,16 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
 let canvas = new fabric.Canvas('main-canvas', {
     preserveObjectStacking: true,
     selection: true,
-    allowTouchScrolling: false,   // let Fabric handle ALL touch on canvas
-    enablePointerEvents: true,    // use pointer events for better mobile support
+    allowTouchScrolling: true, // Fix 4: Lets Fabric properly negotiate touch scrolling vs dragging
 });
 
 let sigCanvas, pdfDoc = null, pageNum = 1, currentZoom = 1;
 let pageStates = {}, activeTool = 'pan';
 let undoStack = [], redoStack = [];
 let _suppressUndo = false;
+let currentRawViewport = null;
+let currentPageTextContent = null;
+let bgCanvasData = null; // Stored canvas context for pixel reading
 
 // ─── Undo/Redo ───
 function pushUndo() {
@@ -174,18 +179,15 @@ canvas.on('path:created', function(opt) {
     }
 });
 
-// ─── Floating tool bubble (shown above toolbar button) ───
+// ─── Floating tool bubble ───
 const TOOLS_WITH_PROPS = new Set(['text', 'pen', 'highlighter', 'shape']);
 const FONT_TOOLS       = new Set(['text']);
 
 function showToolBubble(toolName) {
     const bubble = document.getElementById('tool-bubble');
     const fontWrap = document.getElementById('font-wrap');
-
-    // Show/hide font section depending on tool
     fontWrap.style.display = FONT_TOOLS.has(toolName) || toolName === 'selected-text' ? 'flex' : 'none';
 
-    // Position bubble above the toolbar button
     const btn = document.getElementById('tool-' + toolName);
     const toolbar = document.getElementById('toolbar');
     const editorRect = document.getElementById('editor-screen').getBoundingClientRect();
@@ -195,14 +197,12 @@ function showToolBubble(toolName) {
         const cx = btnRect.left + btnRect.width / 2 - editorRect.left;
         bubble.style.display = 'flex';
         bubble.style.bottom = (toolbar.offsetHeight + 6) + 'px';
-        // Clamp so bubble never goes off screen
         requestAnimationFrame(() => {
             const bw = bubble.offsetWidth;
             let left = cx - bw / 2;
             left = Math.max(8, Math.min(left, editorRect.width - bw - 8));
             bubble.style.left = left + 'px';
             bubble.style.transform = 'none';
-            // Move arrow to point at button
             const arrow = document.getElementById('bubble-arrow');
             arrow.style.left = (cx - left) + 'px';
         });
@@ -213,29 +213,18 @@ function showToolBubble(toolName) {
         bubble.style.bottom = (toolbar.offsetHeight + 6) + 'px';
     }
 }
-
-function hideToolBubble() {
-    document.getElementById('tool-bubble').style.display = 'none';
-}
+function hideToolBubble() { document.getElementById('tool-bubble').style.display = 'none'; }
 
 // ─── Floating object action bar ───
-// Positioned INSIDE #workspace (absolute), so it scrolls with the canvas content.
-// We move #obj-actions inside workspace in the HTML via JS on first call.
 function showObjActions(obj) {
     const bar     = document.getElementById('obj-actions');
     const wrapper = document.getElementById('canvas-wrapper');
 
     if (!obj) { hideObjActions(); return; }
 
-
     const bound = obj.getBoundingRect(true);
-
-    // wrapper is centered by flexbox + scale(currentZoom) from top center.
-    // Get wrapper's actual position relative to workspace (including scroll).
     const wrapperRect  = wrapper.getBoundingClientRect();
     const workspaceRect = workspace.getBoundingClientRect();
-
-    // wrapper top-left relative to the workspace scroll container
     const wrapperLeft = wrapperRect.left - workspaceRect.left + workspace.scrollLeft;
     const wrapperTop  = wrapperRect.top  - workspaceRect.top  + workspace.scrollTop;
 
@@ -253,10 +242,7 @@ function showObjActions(obj) {
         let top  = objTop - bh - 8;
         let left = objLeft + objW / 2 - bw / 2;
 
-        if (top < workspace.scrollTop + 4) {
-            top = objTop + objH + 8;
-        }
-
+        if (top < workspace.scrollTop + 4) top = objTop + objH + 8;
         const maxLeft = workspace.scrollLeft + workspace.clientWidth - bw - 4;
         left = Math.max(workspace.scrollLeft + 4, Math.min(left, maxLeft));
 
@@ -268,10 +254,7 @@ function showObjActions(obj) {
         arrow.style.left = Math.max(12, Math.min(cx, bw - 12)) + 'px';
     });
 }
-
-function hideObjActions() {
-    document.getElementById('obj-actions').style.display = 'none';
-}
+function hideObjActions() { document.getElementById('obj-actions').style.display = 'none'; }
 
 // ─── Tool management ───
 function setTool(tool) {
@@ -281,33 +264,29 @@ function setTool(tool) {
     if (btn) btn.classList.add('active');
 
     canvas.isDrawingMode = (tool === 'pen' || tool === 'highlighter');
-    canvas.selection     = (tool !== 'pen' && tool !== 'highlighter');
-    canvas.defaultCursor = tool === 'pan' ? 'grab' : tool === 'text' ? 'text' : 'crosshair';
+    canvas.selection     = (tool !== 'pen' && tool !== 'highlighter' && tool !== 'scan');
+    
+    if (tool === 'pan') canvas.defaultCursor = 'grab';
+    else if (tool === 'text') canvas.defaultCursor = 'text';
+    else if (tool === 'scan') canvas.defaultCursor = 'help';
+    else canvas.defaultCursor = 'crosshair';
 
-    // Show/hide floating bubble
-    if (TOOLS_WITH_PROPS.has(tool)) {
-        showToolBubble(tool);
-    } else {
-        hideToolBubble();
-    }
+    if (TOOLS_WITH_PROPS.has(tool)) showToolBubble(tool);
+    else hideToolBubble();
 
-    // Hide obj actions when switching tools
     hideObjActions();
     updateStyle();
 }
 
-// ─── Zoom: pinch (mobile) + ctrl+wheel (desktop) ───
+// ─── Zoom ───
 let initialPinchDistance = null;
 let lastPinchZoom = 1;
 const workspace = document.getElementById('workspace');
 
 workspace.addEventListener('touchstart', (e) => {
     if (e.touches.length === 2) {
-        e.preventDefault(); // prevent browser zoom
-        initialPinchDistance = Math.hypot(
-            e.touches[0].clientX - e.touches[1].clientX,
-            e.touches[0].clientY - e.touches[1].clientY
-        );
+        e.preventDefault();
+        initialPinchDistance = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
         lastPinchZoom = currentZoom;
     }
 }, { passive: false });
@@ -315,10 +294,7 @@ workspace.addEventListener('touchstart', (e) => {
 workspace.addEventListener('touchmove', (e) => {
     if (e.touches.length === 2 && initialPinchDistance) {
         e.preventDefault();
-        const d = Math.hypot(
-            e.touches[0].clientX - e.touches[1].clientX,
-            e.touches[0].clientY - e.touches[1].clientY
-        );
+        const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
         const scale = d / initialPinchDistance;
         currentZoom = Math.max(0.15, Math.min(4, lastPinchZoom * scale));
         applyZoom();
@@ -329,7 +305,6 @@ workspace.addEventListener('touchend', (e) => {
     if (e.touches.length < 2) initialPinchDistance = null;
 });
 
-// Ctrl+wheel zoom on desktop (doesn't move the page)
 workspace.addEventListener('wheel', (e) => {
     if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
@@ -339,71 +314,32 @@ workspace.addEventListener('wheel', (e) => {
     }
 }, { passive: false });
 
-// ─── Canvas events ───
-let isDragging = false, lastPosX, lastPosY;
-let isManipulating = false;  // true while user moves/scales/rotates an object
-
-// The CORRECT fix for iOS/touch scroll during object manipulation:
-// Fabric renders to .upper-canvas which captures pointer events.
-// We set touch-action:none on it via CSS already.
-// But we also need to block the workspace scroll container itself.
-// We use a flag + pointer capture approach instead of overflow toggling (which flickers).
+// ─── Touch Fix for Mobile Dragging ───
+// We toggle overflow so Fabric can capture movement without page shifting
 function setManipulating(val) {
-    isManipulating = val;
     if (val) {
         workspace.style.overflow = 'hidden';
-        workspace.style.touchAction = 'none';
-        isDragging = false;
     } else {
         workspace.style.overflow = 'auto';
-        workspace.style.touchAction = '';
     }
 }
 
-// Release manipulation lock when touch ends anywhere
-document.addEventListener('touchend', () => {
-    if (isManipulating) setManipulating(false);
-}, { passive: true });
-
-// ── Definitive scroll-lock for touch devices ──────────────────────
-// Strategy: intercept touchmove on the workspace container itself.
-// When isManipulating is true (object being dragged/scaled/rotated),
-// we call preventDefault() on every touchmove that reaches the workspace.
-// This stops iOS scroll completely without relying on Fabric internals.
-workspace.addEventListener('touchmove', (e) => {
-    if (isManipulating) {
-        e.preventDefault();
-        e.stopPropagation();
-    }
-}, { passive: false });
-
-// Block scroll when manipulating objects - catch at document level
-document.addEventListener('touchmove', (e) => {
-    if (!isManipulating) return;
-    const editorEl = document.getElementById('editor-screen');
-    if (editorEl && editorEl.contains(e.target)) {
-        e.preventDefault();
-    }
-}, { passive: false });
-
-// Fabric needs touch events to reach canvas for object manipulation.
-// Make sure the upper-canvas is not swallowed by workspace scroll.
-// We set allowTouchScrolling=false above, but also need to stop the
-// workspace from grabbing single-finger drag when an object is selected.
-canvas.on('mouse:down', function(opt) {
-    if (opt.target && activeTool === 'pan') {
-        // An object is being touched — immediately mark as potentially manipulating
-        // so the next touchmove doesn't scroll
-        isManipulating = true;
-        workspace.style.overflow = 'hidden';
-        workspace.style.touchAction = 'none';
-    }
-});
+let isDragging = false, lastPosX, lastPosY;
 
 canvas.on('mouse:down', function(opt) {
+    const ptr = canvas.getPointer(opt.e);
+    
+    // Fix 5: PDF Text Scanner Implementation
+    if (activeTool === 'scan') {
+        scanTextAtPointer(ptr.x, ptr.y);
+        return;
+    }
+
     if (activeTool === 'pan') {
-        // Don't start panning if the user clicked on a selected object
-        if (opt.target) return;
+        if (opt.target) {
+            setManipulating(true);
+            return;
+        }
         if (!opt.e.touches || opt.e.touches.length === 1) {
             isDragging = true;
             canvas.defaultCursor = 'grabbing';
@@ -412,7 +348,6 @@ canvas.on('mouse:down', function(opt) {
         }
     } else if (activeTool === 'text') {
         if (opt.target?.type === 'i-text') return;
-        const ptr = canvas.getPointer(opt.e);
         const obj = new fabric.IText('Tap here to type', {
             left: ptr.x, top: ptr.y,
             fill: document.getElementById('colorPicker').value,
@@ -429,7 +364,6 @@ canvas.on('mouse:down', function(opt) {
             syncToolbar(obj);
         });
     } else if (activeTool === 'shape') {
-        const ptr = canvas.getPointer(opt.e);
         const rect = new fabric.Rect({
             left: ptr.x - 60, top: ptr.y - 40,
             width: 120, height: 80,
@@ -438,12 +372,8 @@ canvas.on('mouse:down', function(opt) {
             strokeWidth: Math.max(1, parseInt(document.getElementById('sizePicker').value) / 5),
             rx: 4, ry: 4,
         });
-        canvas.add(rect);
-        canvas.setActiveObject(rect);
-        setTool('pan');
+        canvas.add(rect); canvas.setActiveObject(rect); setTool('pan');
     } else if (activeTool === 'sig-place') {
-        // Signature placement: user clicked where they want the center of the sig
-        const ptr = canvas.getPointer(opt.e);
         setTool('pan');
         canvas.defaultCursor = 'default';
         _pendingSigCenter = ptr;
@@ -453,8 +383,7 @@ canvas.on('mouse:down', function(opt) {
             sigCanvas.freeDrawingBrush.width = 3;
             sigCanvas.freeDrawingBrush.color = '#000000';
         }
-        sigCanvas.clear();
-        sigCanvas.renderAll();
+        sigCanvas.clear(); sigCanvas.renderAll();
     }
 });
 
@@ -473,18 +402,17 @@ canvas.on('mouse:move', function(opt) {
 
 canvas.on('mouse:up', () => {
     isDragging = false;
+    setManipulating(false);
     if (activeTool === 'pan') canvas.defaultCursor = 'grab';
 });
 
-// Double-tap / double-click to edit text
-// Fabric fires mouse:dblclick on desktop; on mobile we detect two taps < 400ms apart
+// ─── Double Tap to Select All ───
 let _lastTapTarget = null, _lastTapTime = 0;
 
 function enterTextEdit(obj) {
     if (!obj || obj.type !== 'i-text') return;
     canvas.setActiveObject(obj);
     obj.enterEditing();
-    // Always select all — so typing immediately replaces the text
     obj.selectAll();
     canvas.renderAll();
     showObjActions(obj);
@@ -497,7 +425,6 @@ canvas.on('mouse:dblclick', (opt) => {
 canvas.on('mouse:down', function(tapOpt) {
     const now    = Date.now();
     const target = tapOpt.target;
-
     // Mobile double-tap
     if (target?.type === 'i-text' && target === _lastTapTarget && (now - _lastTapTime) < 400) {
         enterTextEdit(target);
@@ -510,12 +437,10 @@ canvas.on('mouse:down', function(tapOpt) {
     }
 });
 
-// Lock workspace scroll while dragging/scaling/rotating objects
+// Object events
 canvas.on('object:moving',   (opt) => { setManipulating(true);  showObjActions(opt.target); });
 canvas.on('object:scaling',  (opt) => { setManipulating(true);  showObjActions(opt.target); });
 canvas.on('object:rotating', (opt) => { setManipulating(true);  showObjActions(opt.target); });
-canvas.on('mouse:up',        ()    => { setManipulating(false); });
-canvas.on('touch:up',        ()    => { setManipulating(false); });
 
 canvas.on('selection:created', (opt) => {
     syncToolbar(opt.selected?.[0] || canvas.getActiveObject());
@@ -528,30 +453,25 @@ canvas.on('selection:updated', (opt) => {
 canvas.on('text:editing:entered', () => {
     const obj = canvas.getActiveObject();
     syncToolbar(obj);
-    // Keep action bar visible while editing
     showObjActions(obj);
 });
 canvas.on('text:editing:exited', () => {
     showObjActions(canvas.getActiveObject());
 });
 
-// Keep obj-actions in sync when user scrolls
 workspace.addEventListener('scroll', () => {
     const obj = canvas.getActiveObject();
     if (obj) showObjActions(obj);
 }, { passive: true });
+
 canvas.on('selection:cleared', () => {
     hideObjActions();
-    // Hide bubble only if not in a drawing tool
-    if (!TOOLS_WITH_PROPS.has(activeTool)) {
-        hideToolBubble();
-    }
+    if (!TOOLS_WITH_PROPS.has(activeTool)) hideToolBubble();
 });
 
 function syncToolbar(obj) {
     obj = obj || canvas.getActiveObject();
     if (!obj) return;
-
     if (obj.type === 'i-text') {
         document.getElementById('colorPicker').value = obj.fill || '#000000';
         document.getElementById('sizePicker').value  = obj.fontSize || 20;
@@ -562,6 +482,69 @@ function syncToolbar(obj) {
         document.getElementById('colorPicker').value = col !== 'transparent' ? col : '#000000';
         showToolBubble('shape');
     }
+}
+
+// ─── Scan Text Feature ───
+function scanTextAtPointer(x, y) {
+    if (!currentPageTextContent || !currentRawViewport) {
+        showToast("Text data not loaded yet.");
+        return;
+    }
+    
+    // Convert Fabric canvas coords to PDF layout coords
+    // PDF.js viewport coordinates start (0,0) at bottom-left in some transformations, 
+    // but the geometry matrix handles the positioning.
+    let pdfY = currentRawViewport.height - y;
+    
+    let detectedFont = 'Arial';
+    let detectedSize = 20;
+    let foundText = false;
+
+    // Scan Text Content
+    for (let item of currentPageTextContent.items) {
+        let tx = item.transform[4];
+        let ty = item.transform[5];
+        let height = Math.abs(item.transform[0]);
+        let width = item.width;
+
+        // Expanded hitbox (pad by 10px) to make tapping on mobile easier
+        if (x >= tx - 10 && x <= tx + width + 10 && pdfY >= ty - height * 0.3 && pdfY <= ty + height * 1.3) {
+            detectedSize = Math.round(height);
+            // Guess Font Family
+            let fontStr = item.fontName.toLowerCase();
+            if (fontStr.includes('serif') || fontStr.includes('times')) detectedFont = 'Georgia';
+            else if (fontStr.includes('mono') || fontStr.includes('courier')) detectedFont = 'Courier New';
+            else detectedFont = 'Arial'; // Handles Arabic/Hebrew fallback smoothly
+            foundText = true;
+            break;
+        }
+    }
+
+    // Scan Pixel Color
+    let detectedColor = "#000000";
+    if (bgCanvasData) {
+        try {
+            // PDF_QUALITY scales the internal rendering up
+            const px = bgCanvasData.getImageData(x * PDF_QUALITY, y * PDF_QUALITY, 1, 1).data;
+            // If not completely transparent, use it
+            if (px[3] > 0) detectedColor = rgbToHex(px[0], px[1], px[2]);
+        } catch (e) {
+            console.error("Pixel read error", e);
+        }
+    }
+
+    if (foundText) {
+        document.getElementById('sizePicker').value = detectedSize;
+        document.getElementById('fontFamily').value = detectedFont;
+        document.getElementById('colorPicker').value = detectedColor;
+        showToast(`Text scanned: ${detectedSize}px ${detectedFont}`);
+    } else {
+        document.getElementById('colorPicker').value = detectedColor;
+        showToast(`Color picked: ${detectedColor}`);
+    }
+    
+    // Switch back to text tool automatically
+    setTool('text');
 }
 
 // ─── Load PDF ───
@@ -585,36 +568,40 @@ document.getElementById('upload-pdf').addEventListener('change', async (e) => {
     }
 });
 
-// Internal render scale — high DPI quality
 const PDF_QUALITY = 2.0;
 
 async function renderPage(num, autoFit = false) {
     const page   = await pdfDoc.getPage(num);
-    const rawVP  = page.getViewport({ scale: 1 });   // natural size
+    currentRawViewport = page.getViewport({ scale: 1 });
+    
+    // Fetch text layout mapping for Text Scanner
+    currentPageTextContent = await page.getTextContent();
 
     if (autoFit) {
-        // Wait for layout to settle after screen navigation
         await new Promise(r => setTimeout(r, 80));
         const availW = workspace.clientWidth  - 32;
         const availH = workspace.clientHeight - 32;
-        currentZoom  = Math.min(availW / rawVP.width, availH / rawVP.height);
+        currentZoom  = Math.min(availW / currentRawViewport.width, availH / currentRawViewport.height);
     }
 
-    // Render at high quality internally
     const hiVP = page.getViewport({ scale: PDF_QUALITY });
     const tmp  = document.createElement('canvas');
     tmp.width  = hiVP.width;
     tmp.height = hiVP.height;
-    await page.render({ canvasContext: tmp.getContext('2d'), viewport: hiVP }).promise;
+    
+    // Save to global for Pixel Reading
+    bgCanvasData = tmp.getContext('2d', { willReadFrequently: true });
+    
+    await page.render({ canvasContext: bgCanvasData, viewport: hiVP }).promise;
 
-    // Fabric canvas dimensions = natural PDF size (zoom applied via CSS)
     canvas.clear();
-    canvas.setDimensions({ width: rawVP.width, height: rawVP.height });
+    canvas.setDimensions({ width: currentRawViewport.width, height: currentRawViewport.height });
 
     const img = new fabric.Image(tmp, {
-        scaleX: rawVP.width  / hiVP.width,
-        scaleY: rawVP.height / hiVP.height,
+        scaleX: currentRawViewport.width  / hiVP.width,
+        scaleY: currentRawViewport.height / hiVP.height,
     });
+    
     canvas.setBackgroundImage(img, () => {
         canvas.renderAll();
         if (pageStates[num]) canvas.loadFromJSON(pageStates[num], canvas.renderAll.bind(canvas));
@@ -634,18 +621,11 @@ function applyZoom() {
     const scaledW = canvas.width  * currentZoom;
     const scaledH = canvas.height * currentZoom;
 
-    // Scale visually — transform-origin is top center so flexbox centering still works
     wrapper.style.transform = `scale(${currentZoom})`;
-
-    // Spacer must be at least as wide/tall as the scaled canvas so scrollbars work
-    // Width: max of workspace width or scaled canvas (with padding)
     spacer.style.minWidth  = (scaledW + 32) + 'px';
     spacer.style.minHeight = (scaledH + 32) + 'px';
-    // Remove fixed width/height so flexbox can still center when canvas < workspace
     spacer.style.width  = '';
     spacer.style.height = '';
-
-    // Recalculate where the canvas element is on screen (needed for object hit-testing)
     setTimeout(() => canvas.calcOffset(), 40);
 }
 
@@ -659,20 +639,6 @@ function changePage(offset) {
         hideToolBubble();
         renderPage(pageNum);
     }
-}
-
-function updateZoomDisplay() {
-    applyZoom();
-}
-
-function setZoom(delta) {
-    currentZoom = Math.max(0.15, Math.min(4, currentZoom + delta));
-    applyZoom();
-}
-
-async function resetZoom() {
-    if (!pdfDoc) return;
-    await renderPage(pageNum, true);   // autoFit=true recalculates zoom and re-centers
 }
 
 function updateStyle() {
@@ -722,7 +688,6 @@ function duplicateSelected() {
     });
 }
 
-// ─── Image upload ───
 function handleImageUpload(e) {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
@@ -738,82 +703,6 @@ function handleImageUpload(e) {
     e.target.value = '';
 }
 
-// ─── Signature ───
-// Two-step: first user clicks where to place, then draws
-let _pendingSigCenter = null;
-
-function openSignatureModal() {
-    if (!pdfDoc) { showToast('Open a PDF first'); return; }
-    // Step 1: enter placement mode
-    setTool('sig-place');
-    canvas.defaultCursor = 'crosshair';
-    showToast('Click on the PDF where you want to place your signature');
-}
-
-function clearSignature() { if (sigCanvas) sigCanvas.clear(); }
-
-function saveSignature() {
-    if (!sigCanvas || !sigCanvas.getObjects().length) { closeModal('sig-modal'); return; }
-    fabric.Image.fromURL(sigCanvas.toDataURL('image/png'), img => {
-        const targetW = Math.min(180, canvas.width * 0.35);
-        img.scaleToWidth(targetW);
-
-        if (_pendingSigCenter) {
-            img.set({ left: _pendingSigCenter.x, top: _pendingSigCenter.y, originX: 'center', originY: 'center' });
-            _pendingSigCenter = null;
-        } else {
-            img.set({ left: canvas.width/2, top: canvas.height * 0.75, originX: 'center', originY: 'center' });
-        }
-
-        canvas.add(img);
-        canvas.setActiveObject(img);
-        setTool('pan');
-        isDirty = true;
-        closeModal('sig-modal');
-        showToast('Signature placed ✓');
-    });
-}
-
-// ─── Stamps ───
-const STAMPS = [
-    { label: 'APPROVED',     bg: '#16a34a' },
-    { label: 'REJECTED',     bg: '#dc2626' },
-    { label: 'DRAFT',        bg: '#ca8a04' },
-    { label: 'CONFIDENTIAL', bg: '#7c3aed' },
-    { label: 'REVIEWED',     bg: '#0284c7' },
-    { label: 'SIGNED',       bg: '#0f766e' },
-];
-
-function insertStamp() {
-    if (!pdfDoc) { showToast('Open a PDF first'); return; }
-    const grid = document.getElementById('stamp-grid');
-    grid.innerHTML = '';
-    STAMPS.forEach(s => {
-        const btn = document.createElement('button');
-        btn.style.cssText = `background:${s.bg}22;border:2px solid ${s.bg}66;color:${s.bg};
-            border-radius:10px;padding:12px 8px;font-weight:700;font-size:12px;letter-spacing:1px;
-            cursor:pointer;font-family:var(--font-display);transition:all 0.2s;`;
-        btn.textContent = s.label;
-        btn.onmouseenter = () => btn.style.background = s.bg + '33';
-        btn.onmouseleave = () => btn.style.background = s.bg + '22';
-        btn.onclick = () => {
-            const text = new fabric.Text(s.label, {
-                left: canvas.width/2, top: canvas.height/2,
-                originX: 'center', originY: 'center',
-                fill: s.bg, fontSize: 36, fontFamily: 'Impact',
-                opacity: 0.8, stroke: s.bg, strokeWidth: 1, angle: -15,
-            });
-            canvas.add(text); canvas.setActiveObject(text);
-            setTool('pan'); isDirty = true;
-            closeModal('stamp-modal');
-            showToast(`${s.label} stamp added`);
-        };
-        grid.appendChild(btn);
-    });
-    openModal('stamp-modal');
-}
-
-// ─── Export ───
 function openExportModal() {
     if (!pdfDoc) { showToast('Open a PDF first'); return; }
     openModal('export-modal');
@@ -866,19 +755,6 @@ async function executeExport() {
     isDirty = false;
     hideLoader();
 }
-
-// ─── Keyboard shortcuts ───
-document.addEventListener('keydown', e => {
-    if (currentScreen !== 'editor') return;
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
-    if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (!canvas.getActiveObject()?.isEditing) { e.preventDefault(); deleteSelected(); }
-    }
-    if ((e.ctrlKey || e.metaKey) && e.key === 'd') { e.preventDefault(); duplicateSelected(); }
-    if (e.key === 'ArrowLeft')  changePage(-1);
-    if (e.key === 'ArrowRight') changePage(1);
-});
 
 // ══════════════════════════════════════════
 // MODULE 2: ORGANIZE
@@ -1137,7 +1013,7 @@ document.getElementById('upload-split').addEventListener('change', async e => {
 function updateSplitCount() {
     const n = splitSelectedPages.size;
     const btn = document.querySelector('#header-actions .btn-success');
-    if (btn) btn.textContent = n > 0 ? `✂️ Extract (${n})` : '✂️ Extract';
+    if (btn) btn.innerHTML = n > 0 ? `✂️ <span class="btn-label">Extract (${n})</span>` : '✂️ <span class="btn-label">Extract</span>';
 }
 
 function selectAllSplitPages() {
@@ -1179,7 +1055,7 @@ function triggerDownload(bytes, name) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-// ─── Expose all to window (needed because script loads with defer) ───
+// ─── Expose all to window ───
 window.navTo               = navTo;
 window.attemptNavHome      = attemptNavHome;
 window.confirmNavHome      = confirmNavHome;
@@ -1190,11 +1066,9 @@ window.openExportModal     = openExportModal;
 window.executeExport       = executeExport;
 window.setTool             = setTool;
 window.setZoom             = setZoom;
-window.resetZoom           = resetZoom;
 window.changePage          = changePage;
 window.deleteSelected      = deleteSelected;
 window.duplicateSelected   = duplicateSelected;
-window.insertStamp         = insertStamp;
 window.openSignatureModal  = openSignatureModal;
 window.clearSignature      = clearSignature;
 window.saveSignature       = saveSignature;
