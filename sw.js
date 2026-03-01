@@ -1,4 +1,4 @@
-const CACHE_NAME = 'folio-v3';
+const CACHE_NAME = 'folio-v1';
 const ASSETS = ['./index.html', './app.js', './manifest.json'];
 
 self.addEventListener('install', e => {

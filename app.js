@@ -1,7 +1,9 @@
+// ─── Service Worker ───
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
 
+// ─── PWA Install ───
 let deferredPrompt;
 window.addEventListener('beforeinstallprompt', e => {
     e.preventDefault();
@@ -19,6 +21,7 @@ document.getElementById('install-btn').addEventListener('click', async () => {
     }
 });
 
+// ─── Helpers ───
 function readFileAsArrayBuffer(file) {
     return new Promise((resolve, reject) => {
         const r = new FileReader();
@@ -51,6 +54,7 @@ function showToast(msg) {
     }, 2000);
 }
 
+// ─── Navigation ───
 let isDirty = false;
 let currentScreen = 'home';
 
@@ -128,7 +132,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
 
 let canvas = new fabric.Canvas('main-canvas', {
     preserveObjectStacking: true,
-    selection: false, // Prevent the blue multi-select box from interfering with panning/scanning
+    selection: false,
+    allowTouchScrolling: true,
 });
 
 let sigCanvas, pdfDoc = null, pageNum = 1, currentZoom = 1;
@@ -138,6 +143,7 @@ let _suppressUndo = false;
 let currentRawViewport = null;
 let currentPageTextContent = null;
 let bgCanvasData = null; 
+const PDF_QUALITY = 2.0;
 
 function pushUndo() {
     if (_suppressUndo) return;
@@ -187,10 +193,9 @@ function showToolBubble(toolName) {
     document.getElementById('font-wrap').style.display = (toolName === 'text' || toolName === 'selected-text') ? 'flex' : 'none';
     document.getElementById('shape-wrap').style.display = (toolName === 'shape' || toolName === 'selected-shape') ? 'flex' : 'none';
 
-    // Fallback if no matching button
     let btn = document.getElementById('tool-' + toolName);
     if (!btn && toolName.includes('selected')) {
-        btn = document.getElementById('tool-pan'); // Anchor to pan if just selecting
+        btn = document.getElementById('tool-pan'); 
     }
 
     const editorRect = document.getElementById('editor-screen').getBoundingClientRect();
@@ -236,18 +241,15 @@ function showObjActions(obj) {
 
     requestAnimationFrame(() => {
         const bw = bar.offsetWidth;
-        // Fix 2: Move the action bar BELOW the object
         let top = objTop + objH + 16; 
         let left = objLeft + objW / 2 - bw / 2;
 
-        // If it goes off the bottom of the screen, put it above instead
         if (top + bar.offsetHeight > workspace.scrollTop + workspace.clientHeight) {
             top = objTop - bar.offsetHeight - 16;
             document.getElementById('obj-actions-arrow').style.top = 'auto';
             document.getElementById('obj-actions-arrow').style.bottom = '-7px';
             document.getElementById('obj-actions-arrow').style.transform = 'translateX(-50%) rotate(225deg)';
         } else {
-            // Default arrow pointing up
             document.getElementById('obj-actions-arrow').style.top = '-7px';
             document.getElementById('obj-actions-arrow').style.bottom = 'auto';
             document.getElementById('obj-actions-arrow').style.transform = 'translateX(-50%) rotate(45deg)';
@@ -293,6 +295,40 @@ function setTool(tool) {
     updateStyle();
 }
 
+// ─── Zoom & Page Navigation ───
+function applyZoom() {
+    const wrapper = document.getElementById('canvas-wrapper');
+    const spacer  = document.getElementById('scroll-spacer');
+    if (!canvas.width) return;
+
+    const scaledW = canvas.width  * currentZoom;
+    const scaledH = canvas.height * currentZoom;
+
+    wrapper.style.transform = `scale(${currentZoom})`;
+    spacer.style.minWidth  = (scaledW + 32) + 'px';
+    spacer.style.minHeight = (scaledH + 32) + 'px';
+    spacer.style.width  = '';
+    spacer.style.height = '';
+    setTimeout(() => canvas.calcOffset(), 40);
+}
+
+function setZoom(delta) {
+    currentZoom = Math.max(0.15, Math.min(4, currentZoom + delta));
+    applyZoom();
+}
+
+function changePage(offset) {
+    if (!pdfDoc) return;
+    const np = pageNum + offset;
+    if (np > 0 && np <= pdfDoc.numPages) {
+        pageStates[pageNum] = JSON.stringify(canvas);
+        pageNum = np;
+        hideObjActions();
+        hideToolBubble();
+        renderPage(pageNum);
+    }
+}
+
 let initialPinchDistance = null;
 let lastPinchZoom = 1;
 const workspace = document.getElementById('workspace');
@@ -332,10 +368,14 @@ workspace.addEventListener('wheel', (e) => {
 let isDragging = false, lastPosX, lastPosY;
 let isScanning = false, scanStartX = 0, scanStartY = 0, scanRectOverlay = null;
 
+function setManipulating(val) {
+    if (val) workspace.style.overflow = 'hidden';
+    else workspace.style.overflow = 'auto';
+}
+
 canvas.on('mouse:down', function(opt) {
     const ptr = canvas.getPointer(opt.e);
     
-    // Fix 1: Scanner dragging logic
     if (activeTool === 'scan') {
         isScanning = true;
         scanStartX = ptr.x;
@@ -350,8 +390,7 @@ canvas.on('mouse:down', function(opt) {
     }
 
     if (activeTool === 'pan') {
-        // If clicking an object, don't pan, let Fabric handle drag/rotate
-        if (opt.target) return; 
+        if (opt.target) { setManipulating(true); return; }
         if (!opt.e.touches || opt.e.touches.length === 1) {
             isDragging = true;
             canvas.defaultCursor = 'grabbing';
@@ -425,6 +464,7 @@ canvas.on('mouse:move', function(opt) {
 
 canvas.on('mouse:up', () => {
     isDragging = false;
+    setManipulating(false);
     if (activeTool === 'pan') canvas.defaultCursor = 'grab';
 
     if (isScanning && scanRectOverlay) {
@@ -450,19 +490,16 @@ function executeScan(bounds) {
     let detectedSize = 20;
     let foundText = false;
 
-    // Y coords flipped in PDF layout
     let pdfYTop = currentRawViewport.height - bounds.top;
     let pdfYBot = currentRawViewport.height - (bounds.top + bounds.height);
 
-    // Find the largest text item inside the bounding box
     let maxFontSize = 0;
     for (let item of currentPageTextContent.items) {
         let tx = item.transform[4];
-        let ty = item.transform[5]; // bottom of text
+        let ty = item.transform[5];
         let th = Math.abs(item.transform[0]);
         let tw = item.width;
 
-        // Check intersection
         if (tx + tw >= bounds.left && tx <= bounds.left + bounds.width && ty >= pdfYBot && ty <= pdfYTop) {
             if (th > maxFontSize) {
                 maxFontSize = th;
@@ -476,7 +513,6 @@ function executeScan(bounds) {
         }
     }
 
-    // Color Scanner (averaging dark pixels inside bounds)
     let detectedColor = "#000000";
     try {
         let sx = bounds.left * PDF_QUALITY;
@@ -489,10 +525,8 @@ function executeScan(bounds) {
         let maxColor = "#000000";
         let maxCount = 0;
 
-        // Step by 16 (4 pixels at a time) for speed
         for(let i=0; i<imgData.length; i+=16) {
             let r = imgData[i], g = imgData[i+1], b = imgData[i+2], a = imgData[i+3];
-            // Ignore transparent and light/white colors
             if (a > 100 && (r < 230 || g < 230 || b < 230)) {
                 let hex = rgbToHex(r,g,b);
                 colorCounts[hex] = (colorCounts[hex] || 0) + 1;
@@ -505,7 +539,6 @@ function executeScan(bounds) {
         if (maxCount > 0) detectedColor = maxColor;
     } catch (e) { console.warn("Pixel scan failed", e); }
 
-    // Apply Settings
     if (foundText) {
         document.getElementById('sizePicker').value = detectedSize;
         document.getElementById('fontFamily').value = detectedFont;
@@ -542,7 +575,6 @@ canvas.on('mouse:dblclick', (opt) => {
 canvas.on('mouse:down', function(tapOpt) {
     const now = Date.now();
     const target = tapOpt.target;
-    // Mobile double tap
     if (target?.type === 'i-text' && target === _lastTapTarget && (now - _lastTapTime) < 400) {
         enterTextEdit(target);
         _lastTapTime = 0; _lastTapTarget = null;
@@ -633,7 +665,7 @@ async function renderPage(num, autoFit = false) {
         const availW = workspace.clientWidth  - 32;
         const availH = workspace.clientHeight - 32;
         let scaleToFit = Math.min(availW / currentRawViewport.width, availH / currentRawViewport.height);
-        currentZoom = Math.min(scaleToFit, 1.0); // Never auto-zoom past 100%
+        currentZoom = Math.min(scaleToFit, 1.0);
     }
 
     const hiVP = page.getViewport({ scale: PDF_QUALITY });
@@ -660,34 +692,6 @@ async function renderPage(num, autoFit = false) {
     document.getElementById('page-info').textContent = `${num}/${pdfDoc.numPages}`;
     document.getElementById('prev-btn').disabled = (num <= 1);
     document.getElementById('next-btn').disabled = (num >= pdfDoc.numPages);
-}
-
-function applyZoom() {
-    const wrapper = document.getElementById('canvas-wrapper');
-    const spacer  = document.getElementById('scroll-spacer');
-    if (!canvas.width) return;
-
-    const scaledW = canvas.width  * currentZoom;
-    const scaledH = canvas.height * currentZoom;
-
-    wrapper.style.transform = `scale(${currentZoom})`;
-    spacer.style.minWidth  = (scaledW + 32) + 'px';
-    spacer.style.minHeight = (scaledH + 32) + 'px';
-    spacer.style.width  = '';
-    spacer.style.height = '';
-    setTimeout(() => canvas.calcOffset(), 40);
-}
-
-function changePage(offset) {
-    if (!pdfDoc) return;
-    const np = pageNum + offset;
-    if (np > 0 && np <= pdfDoc.numPages) {
-        pageStates[pageNum] = JSON.stringify(canvas);
-        pageNum = np;
-        hideObjActions();
-        hideToolBubble();
-        renderPage(pageNum);
-    }
 }
 
 function updateStyle() {
