@@ -1,9 +1,7 @@
-// ─── Service Worker ───
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
 
-// ─── PWA Install ───
 let deferredPrompt;
 window.addEventListener('beforeinstallprompt', e => {
     e.preventDefault();
@@ -21,7 +19,6 @@ document.getElementById('install-btn').addEventListener('click', async () => {
     }
 });
 
-// ─── Helpers ───
 function readFileAsArrayBuffer(file) {
     return new Promise((resolve, reject) => {
         const r = new FileReader();
@@ -54,7 +51,6 @@ function showToast(msg) {
     }, 2000);
 }
 
-// ─── Navigation ───
 let isDirty = false;
 let currentScreen = 'home';
 
@@ -132,8 +128,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
 
 let canvas = new fabric.Canvas('main-canvas', {
     preserveObjectStacking: true,
-    selection: true,
-    allowTouchScrolling: true, // Fix 4: Lets Fabric properly negotiate touch scrolling vs dragging
+    selection: false, // Prevent the blue multi-select box from interfering with panning/scanning
 });
 
 let sigCanvas, pdfDoc = null, pageNum = 1, currentZoom = 1;
@@ -142,9 +137,8 @@ let undoStack = [], redoStack = [];
 let _suppressUndo = false;
 let currentRawViewport = null;
 let currentPageTextContent = null;
-let bgCanvasData = null; // Stored canvas context for pixel reading
+let bgCanvasData = null; 
 
-// ─── Undo/Redo ───
 function pushUndo() {
     if (_suppressUndo) return;
     undoStack.push(JSON.stringify(canvas));
@@ -179,24 +173,32 @@ canvas.on('path:created', function(opt) {
     }
 });
 
-// ─── Floating tool bubble ───
-const TOOLS_WITH_PROPS = new Set(['text', 'pen', 'highlighter', 'shape']);
-const FONT_TOOLS       = new Set(['text']);
+// Color Selection via custom mobile palette
+function selectColor(element, hex) {
+    document.getElementById('colorPicker').value = hex;
+    document.querySelectorAll('.color-dot').forEach(el => el.classList.remove('selected'));
+    element.classList.add('selected');
+    updateStyle();
+}
 
+const TOOLS_WITH_PROPS = new Set(['text', 'pen', 'highlighter', 'shape']);
 function showToolBubble(toolName) {
     const bubble = document.getElementById('tool-bubble');
-    const fontWrap = document.getElementById('font-wrap');
-    fontWrap.style.display = FONT_TOOLS.has(toolName) || toolName === 'selected-text' ? 'flex' : 'none';
+    document.getElementById('font-wrap').style.display = (toolName === 'text' || toolName === 'selected-text') ? 'flex' : 'none';
+    document.getElementById('shape-wrap').style.display = (toolName === 'shape' || toolName === 'selected-shape') ? 'flex' : 'none';
 
-    const btn = document.getElementById('tool-' + toolName);
-    const toolbar = document.getElementById('toolbar');
+    // Fallback if no matching button
+    let btn = document.getElementById('tool-' + toolName);
+    if (!btn && toolName.includes('selected')) {
+        btn = document.getElementById('tool-pan'); // Anchor to pan if just selecting
+    }
+
     const editorRect = document.getElementById('editor-screen').getBoundingClientRect();
-
     if (btn) {
         const btnRect = btn.getBoundingClientRect();
         const cx = btnRect.left + btnRect.width / 2 - editorRect.left;
         bubble.style.display = 'flex';
-        bubble.style.bottom = (toolbar.offsetHeight + 6) + 'px';
+        bubble.style.bottom = '70px';
         requestAnimationFrame(() => {
             const bw = bubble.offsetWidth;
             let left = cx - bw / 2;
@@ -210,20 +212,17 @@ function showToolBubble(toolName) {
         bubble.style.display = 'flex';
         bubble.style.left = '50%';
         bubble.style.transform = 'translateX(-50%)';
-        bubble.style.bottom = (toolbar.offsetHeight + 6) + 'px';
     }
 }
 function hideToolBubble() { document.getElementById('tool-bubble').style.display = 'none'; }
 
-// ─── Floating object action bar ───
 function showObjActions(obj) {
-    const bar     = document.getElementById('obj-actions');
+    const bar = document.getElementById('obj-actions');
     const wrapper = document.getElementById('canvas-wrapper');
-
     if (!obj) { hideObjActions(); return; }
 
     const bound = obj.getBoundingRect(true);
-    const wrapperRect  = wrapper.getBoundingClientRect();
+    const wrapperRect = wrapper.getBoundingClientRect();
     const workspaceRect = workspace.getBoundingClientRect();
     const wrapperLeft = wrapperRect.left - workspaceRect.left + workspace.scrollLeft;
     const wrapperTop  = wrapperRect.top  - workspaceRect.top  + workspace.scrollTop;
@@ -237,12 +236,23 @@ function showObjActions(obj) {
 
     requestAnimationFrame(() => {
         const bw = bar.offsetWidth;
-        const bh = bar.offsetHeight;
-
-        let top  = objTop - bh - 8;
+        // Fix 2: Move the action bar BELOW the object
+        let top = objTop + objH + 16; 
         let left = objLeft + objW / 2 - bw / 2;
 
-        if (top < workspace.scrollTop + 4) top = objTop + objH + 8;
+        // If it goes off the bottom of the screen, put it above instead
+        if (top + bar.offsetHeight > workspace.scrollTop + workspace.clientHeight) {
+            top = objTop - bar.offsetHeight - 16;
+            document.getElementById('obj-actions-arrow').style.top = 'auto';
+            document.getElementById('obj-actions-arrow').style.bottom = '-7px';
+            document.getElementById('obj-actions-arrow').style.transform = 'translateX(-50%) rotate(225deg)';
+        } else {
+            // Default arrow pointing up
+            document.getElementById('obj-actions-arrow').style.top = '-7px';
+            document.getElementById('obj-actions-arrow').style.bottom = 'auto';
+            document.getElementById('obj-actions-arrow').style.transform = 'translateX(-50%) rotate(45deg)';
+        }
+
         const maxLeft = workspace.scrollLeft + workspace.clientWidth - bw - 4;
         left = Math.max(workspace.scrollLeft + 4, Math.min(left, maxLeft));
 
@@ -256,7 +266,6 @@ function showObjActions(obj) {
 }
 function hideObjActions() { document.getElementById('obj-actions').style.display = 'none'; }
 
-// ─── Tool management ───
 function setTool(tool) {
     activeTool = tool;
     document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
@@ -264,11 +273,17 @@ function setTool(tool) {
     if (btn) btn.classList.add('active');
 
     canvas.isDrawingMode = (tool === 'pen' || tool === 'highlighter');
-    canvas.selection     = (tool !== 'pen' && tool !== 'highlighter' && tool !== 'scan');
     
     if (tool === 'pan') canvas.defaultCursor = 'grab';
     else if (tool === 'text') canvas.defaultCursor = 'text';
-    else if (tool === 'scan') canvas.defaultCursor = 'help';
+    else if (tool === 'scan') {
+        canvas.defaultCursor = 'crosshair';
+        showToast('Drag a box over text to scan');
+    }
+    else if (tool === 'sig-place') {
+        canvas.defaultCursor = 'crosshair';
+        showToast('Tap where you want to sign');
+    }
     else canvas.defaultCursor = 'crosshair';
 
     if (TOOLS_WITH_PROPS.has(tool)) showToolBubble(tool);
@@ -278,7 +293,6 @@ function setTool(tool) {
     updateStyle();
 }
 
-// ─── Zoom ───
 let initialPinchDistance = null;
 let lastPinchZoom = 1;
 const workspace = document.getElementById('workspace');
@@ -314,32 +328,30 @@ workspace.addEventListener('wheel', (e) => {
     }
 }, { passive: false });
 
-// ─── Touch Fix for Mobile Dragging ───
-// We toggle overflow so Fabric can capture movement without page shifting
-function setManipulating(val) {
-    if (val) {
-        workspace.style.overflow = 'hidden';
-    } else {
-        workspace.style.overflow = 'auto';
-    }
-}
-
+// ─── Drag, Scan, Text, Shape logic ───
 let isDragging = false, lastPosX, lastPosY;
+let isScanning = false, scanStartX = 0, scanStartY = 0, scanRectOverlay = null;
 
 canvas.on('mouse:down', function(opt) {
     const ptr = canvas.getPointer(opt.e);
     
-    // Fix 5: PDF Text Scanner Implementation
+    // Fix 1: Scanner dragging logic
     if (activeTool === 'scan') {
-        scanTextAtPointer(ptr.x, ptr.y);
+        isScanning = true;
+        scanStartX = ptr.x;
+        scanStartY = ptr.y;
+        scanRectOverlay = new fabric.Rect({
+            left: ptr.x, top: ptr.y, width: 0, height: 0,
+            fill: 'rgba(108,99,255,0.3)', stroke: '#6c63ff', strokeWidth: 1,
+            selectable: false, evented: false
+        });
+        canvas.add(scanRectOverlay);
         return;
     }
 
     if (activeTool === 'pan') {
-        if (opt.target) {
-            setManipulating(true);
-            return;
-        }
+        // If clicking an object, don't pan, let Fabric handle drag/rotate
+        if (opt.target) return; 
         if (!opt.e.touches || opt.e.touches.length === 1) {
             isDragging = true;
             canvas.defaultCursor = 'grabbing';
@@ -348,34 +360,36 @@ canvas.on('mouse:down', function(opt) {
         }
     } else if (activeTool === 'text') {
         if (opt.target?.type === 'i-text') return;
-        const obj = new fabric.IText('Tap here to type', {
+        const obj = new fabric.IText('Tap to type', {
             left: ptr.x, top: ptr.y,
             fill: document.getElementById('colorPicker').value,
             fontSize: parseInt(document.getElementById('sizePicker').value) || 20,
             fontFamily: document.getElementById('fontFamily').value,
             originX: 'left', originY: 'top',
         });
-        canvas.add(obj);
-        canvas.setActiveObject(obj);
-        canvas.renderAll();
+        canvas.add(obj); canvas.setActiveObject(obj); canvas.renderAll();
         setTool('pan');
-        requestAnimationFrame(() => {
-            showObjActions(obj);
-            syncToolbar(obj);
-        });
+        setTimeout(() => { showObjActions(obj); syncToolbar(obj); }, 50);
     } else if (activeTool === 'shape') {
-        const rect = new fabric.Rect({
-            left: ptr.x - 60, top: ptr.y - 40,
-            width: 120, height: 80,
-            fill: 'transparent',
-            stroke: document.getElementById('colorPicker').value,
-            strokeWidth: Math.max(1, parseInt(document.getElementById('sizePicker').value) / 5),
-            rx: 4, ry: 4,
-        });
-        canvas.add(rect); canvas.setActiveObject(rect); setTool('pan');
+        const shapeType = document.getElementById('shapeType').value;
+        const color = document.getElementById('colorPicker').value;
+        const strokeW = Math.max(1, parseInt(document.getElementById('sizePicker').value) / 5);
+        let obj;
+
+        if (shapeType === 'rect') {
+            obj = new fabric.Rect({ left: ptr.x-50, top: ptr.y-30, width: 100, height: 60, fill: 'transparent', stroke: color, strokeWidth: strokeW });
+        } else if (shapeType === 'circle') {
+            obj = new fabric.Circle({ left: ptr.x-40, top: ptr.y-40, radius: 40, fill: 'transparent', stroke: color, strokeWidth: strokeW });
+        } else if (shapeType === 'triangle') {
+            obj = new fabric.Triangle({ left: ptr.x-40, top: ptr.y-40, width: 80, height: 80, fill: 'transparent', stroke: color, strokeWidth: strokeW });
+        } else if (shapeType === 'line') {
+            obj = new fabric.Line([ptr.x, ptr.y, ptr.x + 100, ptr.y], { stroke: color, strokeWidth: strokeW });
+        }
+
+        if(obj) { canvas.add(obj); canvas.setActiveObject(obj); }
+        setTool('pan');
     } else if (activeTool === 'sig-place') {
         setTool('pan');
-        canvas.defaultCursor = 'default';
         _pendingSigCenter = ptr;
         openModal('sig-modal');
         if (!sigCanvas) {
@@ -388,7 +402,16 @@ canvas.on('mouse:down', function(opt) {
 });
 
 canvas.on('mouse:move', function(opt) {
-    if (isDragging && activeTool === 'pan') {
+    if (isScanning && scanRectOverlay) {
+        const ptr = canvas.getPointer(opt.e);
+        scanRectOverlay.set({
+            width: Math.abs(ptr.x - scanStartX),
+            height: Math.abs(ptr.y - scanStartY),
+            left: Math.min(ptr.x, scanStartX),
+            top: Math.min(ptr.y, scanStartY)
+        });
+        canvas.renderAll();
+    } else if (isDragging && activeTool === 'pan') {
         const e  = opt.e;
         const cx = e.clientX ?? e.touches?.[0].clientX;
         const cy = e.clientY ?? e.touches?.[0].clientY;
@@ -402,19 +425,113 @@ canvas.on('mouse:move', function(opt) {
 
 canvas.on('mouse:up', () => {
     isDragging = false;
-    setManipulating(false);
     if (activeTool === 'pan') canvas.defaultCursor = 'grab';
+
+    if (isScanning && scanRectOverlay) {
+        isScanning = false;
+        let bounds = scanRectOverlay.getBoundingRect();
+        canvas.remove(scanRectOverlay);
+        scanRectOverlay = null;
+
+        if (bounds.width < 5 || bounds.height < 5) {
+            showToast("Please drag a box over the text to scan");
+            return;
+        }
+        executeScan(bounds);
+    }
 });
 
-// ─── Double Tap to Select All ───
+function executeScan(bounds) {
+    if (!currentPageTextContent || !currentRawViewport || !bgCanvasData) {
+        showToast("PDF data not available"); return;
+    }
+
+    let detectedFont = 'Arial';
+    let detectedSize = 20;
+    let foundText = false;
+
+    // Y coords flipped in PDF layout
+    let pdfYTop = currentRawViewport.height - bounds.top;
+    let pdfYBot = currentRawViewport.height - (bounds.top + bounds.height);
+
+    // Find the largest text item inside the bounding box
+    let maxFontSize = 0;
+    for (let item of currentPageTextContent.items) {
+        let tx = item.transform[4];
+        let ty = item.transform[5]; // bottom of text
+        let th = Math.abs(item.transform[0]);
+        let tw = item.width;
+
+        // Check intersection
+        if (tx + tw >= bounds.left && tx <= bounds.left + bounds.width && ty >= pdfYBot && ty <= pdfYTop) {
+            if (th > maxFontSize) {
+                maxFontSize = th;
+                detectedSize = Math.round(th);
+                let fontStr = item.fontName.toLowerCase();
+                if (fontStr.includes('serif') || fontStr.includes('times')) detectedFont = 'Georgia';
+                else if (fontStr.includes('mono') || fontStr.includes('courier')) detectedFont = 'Courier New';
+                else detectedFont = 'Arial';
+                foundText = true;
+            }
+        }
+    }
+
+    // Color Scanner (averaging dark pixels inside bounds)
+    let detectedColor = "#000000";
+    try {
+        let sx = bounds.left * PDF_QUALITY;
+        let sy = bounds.top * PDF_QUALITY;
+        let sw = bounds.width * PDF_QUALITY;
+        let sh = bounds.height * PDF_QUALITY;
+        let imgData = bgCanvasData.getImageData(sx, sy, sw, sh).data;
+        
+        let colorCounts = {};
+        let maxColor = "#000000";
+        let maxCount = 0;
+
+        // Step by 16 (4 pixels at a time) for speed
+        for(let i=0; i<imgData.length; i+=16) {
+            let r = imgData[i], g = imgData[i+1], b = imgData[i+2], a = imgData[i+3];
+            // Ignore transparent and light/white colors
+            if (a > 100 && (r < 230 || g < 230 || b < 230)) {
+                let hex = rgbToHex(r,g,b);
+                colorCounts[hex] = (colorCounts[hex] || 0) + 1;
+                if (colorCounts[hex] > maxCount) {
+                    maxCount = colorCounts[hex];
+                    maxColor = hex;
+                }
+            }
+        }
+        if (maxCount > 0) detectedColor = maxColor;
+    } catch (e) { console.warn("Pixel scan failed", e); }
+
+    // Apply Settings
+    if (foundText) {
+        document.getElementById('sizePicker').value = detectedSize;
+        document.getElementById('fontFamily').value = detectedFont;
+        selectColor(document.querySelector('.color-rainbow'), detectedColor);
+        document.getElementById('colorPicker').value = detectedColor;
+        showToast(`Matched: ${detectedSize}px ${detectedFont}`);
+    } else {
+        selectColor(document.querySelector('.color-rainbow'), detectedColor);
+        document.getElementById('colorPicker').value = detectedColor;
+        showToast(`Color picked: ${detectedColor}`);
+    }
+    
+    setTool('text');
+}
+
+// ─── Double Tap to Select All (Overwrite Fix) ───
 let _lastTapTarget = null, _lastTapTime = 0;
 
 function enterTextEdit(obj) {
     if (!obj || obj.type !== 'i-text') return;
     canvas.setActiveObject(obj);
     obj.enterEditing();
-    obj.selectAll();
-    canvas.renderAll();
+    setTimeout(() => {
+        obj.selectAll();
+        canvas.renderAll();
+    }, 50);
     showObjActions(obj);
 }
 
@@ -423,9 +540,9 @@ canvas.on('mouse:dblclick', (opt) => {
 });
 
 canvas.on('mouse:down', function(tapOpt) {
-    const now    = Date.now();
+    const now = Date.now();
     const target = tapOpt.target;
-    // Mobile double-tap
+    // Mobile double tap
     if (target?.type === 'i-text' && target === _lastTapTarget && (now - _lastTapTime) < 400) {
         enterTextEdit(target);
         _lastTapTime = 0; _lastTapTarget = null;
@@ -437,10 +554,10 @@ canvas.on('mouse:down', function(tapOpt) {
     }
 });
 
-// Object events
-canvas.on('object:moving',   (opt) => { setManipulating(true);  showObjActions(opt.target); });
-canvas.on('object:scaling',  (opt) => { setManipulating(true);  showObjActions(opt.target); });
-canvas.on('object:rotating', (opt) => { setManipulating(true);  showObjActions(opt.target); });
+// Object Events (Fixes mobile touch-drag blocking)
+canvas.on('object:moving',   (opt) => { showObjActions(opt.target); });
+canvas.on('object:scaling',  (opt) => { showObjActions(opt.target); });
+canvas.on('object:rotating', (opt) => { showObjActions(opt.target); });
 
 canvas.on('selection:created', (opt) => {
     syncToolbar(opt.selected?.[0] || canvas.getActiveObject());
@@ -472,79 +589,17 @@ canvas.on('selection:cleared', () => {
 function syncToolbar(obj) {
     obj = obj || canvas.getActiveObject();
     if (!obj) return;
+    
     if (obj.type === 'i-text') {
-        document.getElementById('colorPicker').value = obj.fill || '#000000';
+        selectColor(document.querySelector('.color-rainbow'), obj.fill || '#000000');
         document.getElementById('sizePicker').value  = obj.fontSize || 20;
         document.getElementById('fontFamily').value  = obj.fontFamily || 'Arial';
-        showToolBubble('text');
-    } else if (obj.type === 'rect' || obj.type === 'path') {
+        showToolBubble('selected-text');
+    } else if (obj.type === 'rect' || obj.type === 'circle' || obj.type === 'triangle' || obj.type === 'line' || obj.type === 'path') {
         const col = obj.stroke || obj.fill || '#000000';
-        document.getElementById('colorPicker').value = col !== 'transparent' ? col : '#000000';
-        showToolBubble('shape');
+        selectColor(document.querySelector('.color-rainbow'), col !== 'transparent' ? col : '#000000');
+        showToolBubble('selected-shape');
     }
-}
-
-// ─── Scan Text Feature ───
-function scanTextAtPointer(x, y) {
-    if (!currentPageTextContent || !currentRawViewport) {
-        showToast("Text data not loaded yet.");
-        return;
-    }
-    
-    // Convert Fabric canvas coords to PDF layout coords
-    // PDF.js viewport coordinates start (0,0) at bottom-left in some transformations, 
-    // but the geometry matrix handles the positioning.
-    let pdfY = currentRawViewport.height - y;
-    
-    let detectedFont = 'Arial';
-    let detectedSize = 20;
-    let foundText = false;
-
-    // Scan Text Content
-    for (let item of currentPageTextContent.items) {
-        let tx = item.transform[4];
-        let ty = item.transform[5];
-        let height = Math.abs(item.transform[0]);
-        let width = item.width;
-
-        // Expanded hitbox (pad by 10px) to make tapping on mobile easier
-        if (x >= tx - 10 && x <= tx + width + 10 && pdfY >= ty - height * 0.3 && pdfY <= ty + height * 1.3) {
-            detectedSize = Math.round(height);
-            // Guess Font Family
-            let fontStr = item.fontName.toLowerCase();
-            if (fontStr.includes('serif') || fontStr.includes('times')) detectedFont = 'Georgia';
-            else if (fontStr.includes('mono') || fontStr.includes('courier')) detectedFont = 'Courier New';
-            else detectedFont = 'Arial'; // Handles Arabic/Hebrew fallback smoothly
-            foundText = true;
-            break;
-        }
-    }
-
-    // Scan Pixel Color
-    let detectedColor = "#000000";
-    if (bgCanvasData) {
-        try {
-            // PDF_QUALITY scales the internal rendering up
-            const px = bgCanvasData.getImageData(x * PDF_QUALITY, y * PDF_QUALITY, 1, 1).data;
-            // If not completely transparent, use it
-            if (px[3] > 0) detectedColor = rgbToHex(px[0], px[1], px[2]);
-        } catch (e) {
-            console.error("Pixel read error", e);
-        }
-    }
-
-    if (foundText) {
-        document.getElementById('sizePicker').value = detectedSize;
-        document.getElementById('fontFamily').value = detectedFont;
-        document.getElementById('colorPicker').value = detectedColor;
-        showToast(`Text scanned: ${detectedSize}px ${detectedFont}`);
-    } else {
-        document.getElementById('colorPicker').value = detectedColor;
-        showToast(`Color picked: ${detectedColor}`);
-    }
-    
-    // Switch back to text tool automatically
-    setTool('text');
 }
 
 // ─── Load PDF ───
@@ -558,7 +613,7 @@ document.getElementById('upload-pdf').addEventListener('change', async (e) => {
         document.getElementById('editor-placeholder').style.display = 'none';
         document.getElementById('canvas-wrapper').style.display = 'block';
         await renderPage(pageNum, true);
-        showToast('PDF loaded — ' + pdfDoc.numPages + ' page' + (pdfDoc.numPages > 1 ? 's' : ''));
+        showToast('PDF loaded');
     } catch (err) {
         console.error(err);
         showToast('❌ Failed to load PDF');
@@ -568,30 +623,24 @@ document.getElementById('upload-pdf').addEventListener('change', async (e) => {
     }
 });
 
-const PDF_QUALITY = 2.0;
-
 async function renderPage(num, autoFit = false) {
     const page   = await pdfDoc.getPage(num);
     currentRawViewport = page.getViewport({ scale: 1 });
-    
-    // Fetch text layout mapping for Text Scanner
     currentPageTextContent = await page.getTextContent();
 
     if (autoFit) {
         await new Promise(r => setTimeout(r, 80));
         const availW = workspace.clientWidth  - 32;
         const availH = workspace.clientHeight - 32;
-        currentZoom  = Math.min(availW / currentRawViewport.width, availH / currentRawViewport.height);
+        let scaleToFit = Math.min(availW / currentRawViewport.width, availH / currentRawViewport.height);
+        currentZoom = Math.min(scaleToFit, 1.0); // Never auto-zoom past 100%
     }
 
     const hiVP = page.getViewport({ scale: PDF_QUALITY });
     const tmp  = document.createElement('canvas');
     tmp.width  = hiVP.width;
     tmp.height = hiVP.height;
-    
-    // Save to global for Pixel Reading
     bgCanvasData = tmp.getContext('2d', { willReadFrequently: true });
-    
     await page.render({ canvasContext: bgCanvasData, viewport: hiVP }).promise;
 
     canvas.clear();
@@ -651,8 +700,12 @@ function updateStyle() {
         active.set({ fill: color, fontSize: size, fontFamily: font });
         canvas.renderAll();
         isDirty = true;
-    } else if (active?.type === 'rect') {
+    } else if (active?.type === 'rect' || active?.type === 'circle' || active?.type === 'triangle' || active?.type === 'line') {
         active.set({ stroke: color, strokeWidth: Math.max(1, size / 5) });
+        canvas.renderAll();
+        isDirty = true;
+    } else if (active?.type === 'path') {
+        active.set({ stroke: color });
         canvas.renderAll();
         isDirty = true;
     }
@@ -701,6 +754,69 @@ function handleImageUpload(e) {
     };
     reader.readAsDataURL(file);
     e.target.value = '';
+}
+
+function openSignatureModal() {
+    if (!pdfDoc) { showToast('Open a PDF first'); return; }
+    setTool('sig-place');
+}
+
+function clearSignature() { if (sigCanvas) sigCanvas.clear(); }
+
+function saveSignature() {
+    if (!sigCanvas || !sigCanvas.getObjects().length) { closeModal('sig-modal'); return; }
+    fabric.Image.fromURL(sigCanvas.toDataURL('image/png'), img => {
+        const targetW = Math.min(180, canvas.width * 0.35);
+        img.scaleToWidth(targetW);
+
+        if (_pendingSigCenter) {
+            img.set({ left: _pendingSigCenter.x, top: _pendingSigCenter.y, originX: 'center', originY: 'center' });
+            _pendingSigCenter = null;
+        } else {
+            img.set({ left: canvas.width/2, top: canvas.height * 0.75, originX: 'center', originY: 'center' });
+        }
+
+        canvas.add(img); canvas.setActiveObject(img);
+        setTool('pan'); isDirty = true;
+        closeModal('sig-modal');
+        showToast('Signature placed ✓');
+    });
+}
+
+const STAMPS = [
+    { label: 'APPROVED',     bg: '#16a34a' },
+    { label: 'REJECTED',     bg: '#dc2626' },
+    { label: 'DRAFT',        bg: '#ca8a04' },
+    { label: 'CONFIDENTIAL', bg: '#7c3aed' },
+    { label: 'REVIEWED',     bg: '#0284c7' },
+    { label: 'SIGNED',       bg: '#0f766e' },
+];
+
+function insertStamp() {
+    if (!pdfDoc) { showToast('Open a PDF first'); return; }
+    const grid = document.getElementById('stamp-grid');
+    grid.innerHTML = '';
+    STAMPS.forEach(s => {
+        const btn = document.createElement('button');
+        btn.style.cssText = `background:${s.bg}22;border:2px solid ${s.bg}66;color:${s.bg};
+            border-radius:10px;padding:12px 8px;font-weight:700;font-size:12px;letter-spacing:1px;
+            cursor:pointer;font-family:var(--font-display);transition:all 0.2s;`;
+        btn.textContent = s.label;
+        btn.onclick = () => {
+            const text = new fabric.Text(s.label, {
+                left: canvas.width/2, top: canvas.height/2,
+                originX: 'center', originY: 'center',
+                fill: s.bg, fontSize: 36, fontFamily: 'Impact',
+                opacity: 0.8, stroke: s.bg, strokeWidth: 1, angle: -15,
+            });
+            canvas.add(text); canvas.setActiveObject(text);
+            setTool('pan'); isDirty = true;
+            closeModal('stamp-modal');
+            showToast(`${s.label} stamp added`);
+        };
+        grid.appendChild(btn);
+    });
+    openModal('stamp-modal');
 }
 
 function openExportModal() {
@@ -755,6 +871,18 @@ async function executeExport() {
     isDirty = false;
     hideLoader();
 }
+
+document.addEventListener('keydown', e => {
+    if (currentScreen !== 'editor') return;
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (!canvas.getActiveObject()?.isEditing) { e.preventDefault(); deleteSelected(); }
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'd') { e.preventDefault(); duplicateSelected(); }
+    if (e.key === 'ArrowLeft')  changePage(-1);
+    if (e.key === 'ArrowRight') changePage(1);
+});
 
 // ══════════════════════════════════════════
 // MODULE 2: ORGANIZE
@@ -1081,3 +1209,5 @@ window.selectAllSplitPages = selectAllSplitPages;
 window.undo                = undo;
 window.redo                = redo;
 window.updateStyle         = updateStyle;
+window.selectColor         = selectColor;
+window.insertStamp         = insertStamp;
