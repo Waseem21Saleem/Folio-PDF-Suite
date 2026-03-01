@@ -2,6 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <!-- Favicons - cache-busted -->
+    <link rel="icon" type="image/x-icon"  href="./icons/favicon.ico?v=3">
+    <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png?v=3">
+    <link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16.png?v=3">
+    <link rel="apple-touch-icon" sizes="180x180" href="./icons/favicon-180.png?v=3">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <meta name="theme-color" content="#0a0a0f">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -413,8 +418,17 @@
             left: 0; right: 0;
             overflow: auto;
             background: #0d0d14;
-            padding: 24px 24px 40px;
+            padding: 24px 24px 120px;  /* big bottom padding so toolbar never clips content */
             z-index: 30;
+        }
+        /* When an object is being manipulated, block ALL scroll/touch on workspace */
+        #workspace.obj-active {
+            overflow: hidden !important;
+            touch-action: none !important;
+        }
+        /* Fabric upper-canvas: always block default touch so iOS doesn't scroll */
+        .upper-canvas {
+            touch-action: none !important;
         }
 
 
@@ -446,7 +460,8 @@
             display: none;
             background: white;
             box-shadow: 0 30px 80px rgba(0,0,0,0.5);
-            transform-origin: top center;
+            transform-origin: top left;   /* left because we position it via flex center */
+            flex-shrink: 0;
         }
 
         #scroll-spacer {
@@ -454,6 +469,7 @@
             flex-direction: column;
             align-items: center;
             min-width: 100%;
+            padding-bottom: 80px;   /* ensures content above the toolbar */
         }
 
         /* ─── Toolbar ─── */

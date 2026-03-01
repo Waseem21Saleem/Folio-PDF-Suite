@@ -312,29 +312,41 @@ workspace.addEventListener('touchend', () => { initialPinchDistance = null; });
 
 // ─── Canvas events ───
 let isDragging = false, lastPosX, lastPosY;
+let isManipulating = false;  // true while user moves/scales/rotates an object
 
-// CRITICAL: prevent workspace from scrolling when manipulating objects.
-// We do this by intercepting touchmove on the canvas element itself.
-const canvasEl = document.getElementById('main-canvas');
-canvasEl.addEventListener('touchmove', (e) => {
-    // If an object is selected and being manipulated, block scroll
-    if (canvas.getActiveObject() && activeTool !== 'pan') {
-        e.stopPropagation();
-    } else if (canvas.getActiveObject()) {
-        e.stopPropagation();
+// The CORRECT fix for iOS/touch scroll during object manipulation:
+// Fabric renders to .upper-canvas which captures pointer events.
+// We set touch-action:none on it via CSS already.
+// But we also need to block the workspace scroll container itself.
+// We use a flag + pointer capture approach instead of overflow toggling (which flickers).
+function setManipulating(val) {
+    isManipulating = val;
+    if (val) {
+        workspace.style.overflow = 'hidden';
+        workspace.style.touchAction = 'none';
+    } else {
+        workspace.style.overflow = 'auto';
+        workspace.style.touchAction = 'pan-x pan-y';
     }
-}, { passive: false });
-
-// Also prevent the upper-canvas (fabric's event layer) from propagating touch when moving objects
-const upperCanvas = document.querySelector('.upper-canvas');
-if (upperCanvas) {
-    upperCanvas.addEventListener('touchmove', (e) => {
-        if (canvas.getActiveObject()) {
-            e.preventDefault();
-            e.stopPropagation();
-        }
-    }, { passive: false });
 }
+
+// Wait for Fabric to finish initializing then grab upper-canvas
+setTimeout(() => {
+    const uc = document.querySelector('.upper-canvas');
+    if (uc) {
+        uc.addEventListener('touchstart', (e) => {
+            if (canvas.getActiveObject()) {
+                // Don't prevent here - let fabric handle it
+                // but mark that we might start manipulating
+            }
+        }, { passive: true });
+
+        uc.addEventListener('touchmove', (e) => {
+            // Always prevent default on upper-canvas so iOS rubber-banding/scroll stops
+            e.preventDefault();
+        }, { passive: false });
+    }
+}, 100);
 
 canvas.on('mouse:down', function(opt) {
     if (activeTool === 'pan') {
@@ -347,17 +359,21 @@ canvas.on('mouse:down', function(opt) {
     } else if (activeTool === 'text') {
         if (opt.target?.type === 'i-text') return;
         const ptr = canvas.getPointer(opt.e);
-        const obj = new fabric.IText('Type here...', {
+        const obj = new fabric.IText('Double-tap to edit', {
             left: ptr.x, top: ptr.y,
             fill: document.getElementById('colorPicker').value,
             fontSize: parseInt(document.getElementById('sizePicker').value) || 20,
             fontFamily: document.getElementById('fontFamily').value,
+            originX: 'left', originY: 'top',
         });
         canvas.add(obj);
         canvas.setActiveObject(obj);
-        obj.enterEditing();
-        obj.selectAll();
+        // Do NOT enter editing immediately - show the bounding box + handles first
+        // so the user can move/resize before typing. Double-click will enter edit mode.
         setTool('pan');
+        // Show obj-actions and prop bubble right away
+        showObjActions(obj);
+        syncToolbar(obj);
     } else if (activeTool === 'shape') {
         const ptr = canvas.getPointer(opt.e);
         const rect = new fabric.Rect({
@@ -406,29 +422,12 @@ canvas.on('mouse:up', () => {
     if (activeTool === 'pan') canvas.defaultCursor = 'grab';
 });
 
-// Lock workspace scroll while dragging/scaling objects
-canvas.on('object:moving',   lockScroll);
-canvas.on('object:scaling',  lockScroll);
-canvas.on('object:rotating', lockScroll);
-canvas.on('mouse:up',        unlockScroll);
-canvas.on('mouse:out',       unlockScroll);
-
-function lockScroll() {
-    workspace.classList.add('locked');
-}
-function unlockScroll() {
-    workspace.classList.remove('locked');
-}
-
-// Update obj-actions position while dragging
-canvas.on('object:moving', (opt) => {
-    lockScroll();
-    showObjActions(opt.target);
-});
-canvas.on('object:scaling', (opt) => {
-    lockScroll();
-    showObjActions(opt.target);
-});
+// Lock workspace scroll while dragging/scaling/rotating objects
+canvas.on('object:moving',   (opt) => { setManipulating(true);  showObjActions(opt.target); });
+canvas.on('object:scaling',  (opt) => { setManipulating(true);  showObjActions(opt.target); });
+canvas.on('object:rotating', (opt) => { setManipulating(true);  showObjActions(opt.target); });
+canvas.on('mouse:up',        ()    => { setManipulating(false); });
+canvas.on('touch:up',        ()    => { setManipulating(false); });
 
 canvas.on('selection:created', (opt) => {
     syncToolbar(opt.selected?.[0] || canvas.getActiveObject());
@@ -527,13 +526,19 @@ function changePage(offset) {
 
 function updateZoomDisplay() {
     const wrapper = document.getElementById('canvas-wrapper');
-    const spacer  = document.getElementById('scroll-spacer');
     wrapper.style.transform = `scale(${currentZoom})`;
+    // The scroll-spacer must be exactly as tall as the scaled canvas
+    // so the workspace scrollbar knows the real content height.
+    // We set the spacer height explicitly; padding-bottom in CSS adds toolbar clearance.
+    const spacer = document.getElementById('scroll-spacer');
     if (canvas) {
-        spacer.style.height   = `${canvas.height * currentZoom + 60}px`;
-        spacer.style.minWidth = '100%';
+        const scaledH = canvas.height * currentZoom;
+        const scaledW = canvas.width  * currentZoom;
+        spacer.style.height   = scaledH + 'px';
+        spacer.style.minWidth = (scaledW + 48) + 'px';
     }
-    canvas.calcOffset();
+    // Recalculate fabric's offset after any layout change
+    setTimeout(() => canvas.calcOffset(), 50);
 }
 
 function setZoom(delta) {
