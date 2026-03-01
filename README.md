@@ -1,6 +1,6 @@
 # 📄 Folio: The Daily PDF Suite
 
-![Folio Cover](https://cdn-icons-png.flaticon.com/512/1644/1644129.png)
+![Folio Cover](./icons/icon-512.png)
 
 **Folio** is a lightning-fast, fully offline browser-based Progressive Web App (PWA) designed to handle all your daily PDF tasks. Whether you need to sign a document, merge a few files, delete a blank page, or seamlessly edit text, Folio does it all right in your browser—without sending your private files to a server.
 
@@ -39,7 +39,7 @@ This project proves you don't need a massive stack to build a powerful app.
 
 Folio is already hosted and live! You can start using it right now without downloading any code.
 
-**🔗 Try it live:** [Folio — PDF Suite](https://waseemsaleem.github.io/Folio-PDF-Suite/) *(Note: Update this link to your actual GitHub Pages URL)*
+**🔗 Try it live:** [Folio — PDF Suite](https://waseem21saleem.github.io/Folio-PDF-Suite/) 
 
 You have three ways to use it:
 1. **On the Web:** Just open the link above in any modern browser on your desktop or phone to use it instantly.
