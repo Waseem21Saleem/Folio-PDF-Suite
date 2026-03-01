@@ -7,7 +7,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png?v=3">
     <link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16.png?v=3">
     <link rel="apple-touch-icon" sizes="180x180" href="./icons/favicon-180.png?v=3">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#0a0a0f">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <title>Folio — PDF Suite</title>
@@ -216,12 +216,17 @@
         #tool-title {
             font-family: var(--font-display); font-size: 15px; font-weight: 700;
             flex: 1; text-align: center;
-            /* hide on very small screens if needed */
             overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
+        @media (max-width: 420px) { #tool-title { display: none; } }
 
         #header-actions {
-            display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+            display: flex; align-items: center; gap: 5px; flex-shrink: 0;
+        }
+        /* On very small screens, shrink the Open PDF button */
+        @media (max-width: 360px) {
+            #header-actions .btn { font-size: 11px; padding: 6px 8px; }
+            .page-nav span { min-width: 28px; }
         }
 
         /* ── Buttons ── */
@@ -255,7 +260,7 @@
         /* ══════════════════════════
            EDITOR SCREEN
         ══════════════════════════ */
-        #editor-screen { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+        #editor-screen { position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: none; }
 
         #workspace {
             position: absolute;
@@ -654,18 +659,6 @@
             <span class="t-label">Stamp</span>
         </button>
         <div class="toolbar-sep"></div>
-        <button class="tool-btn" onclick="setZoom(0.15)">
-            <span class="t-icon" style="font-size:16px;">＋</span>
-            <span class="t-label">Zoom</span>
-        </button>
-        <button class="tool-btn" onclick="setZoom(-0.15)">
-            <span class="t-icon" style="font-size:16px;">－</span>
-            <span class="t-label">Out</span>
-        </button>
-        <button class="tool-btn" onclick="resetZoom()">
-            <span class="t-icon" style="font-size:13px;">FIT</span>
-            <span class="t-label">Reset</span>
-        </button>
         <button class="tool-btn" onclick="undo()">
             <span class="t-icon" style="font-size:16px;">↩</span>
             <span class="t-label">Undo</span>
@@ -674,6 +667,9 @@
             <span class="t-icon" style="font-size:16px;">↪</span>
             <span class="t-label">Redo</span>
         </button>
+    </div>
+    <div style="width:100%;max-width:900px;text-align:center;padding:24px 0 8px;color:var(--text-dim);font-size:12px;font-weight:300;letter-spacing:0.3px;">
+        Created by <span style="color:var(--text-muted);font-weight:500;">Waseem Saleem</span>
     </div>
 </div>
 

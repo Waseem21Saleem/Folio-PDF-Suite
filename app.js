@@ -80,13 +80,13 @@ function navTo(screenId) {
     if (screenId === 'editor') {
         title.innerText = 'Edit PDF';
         actions.innerHTML = `
-            <button onclick="document.getElementById('upload-pdf').click()" class="btn btn-ghost">📂 <span class="btn-label">Open</span></button>
+            <button onclick="document.getElementById('upload-pdf').click()" class="btn btn-ghost">📄 Open PDF</button>
             <div class="page-nav">
                 <button onclick="changePage(-1)" id="prev-btn" disabled>◀</button>
-                <span id="page-info">0/0</span>
+                <span id="page-info">—</span>
                 <button onclick="changePage(1)" id="next-btn" disabled>▶</button>
             </div>
-            <button onclick="openExportModal()" class="btn btn-success">💾 <span class="btn-label">Save</span></button>
+            <button onclick="openExportModal()" class="btn btn-success">💾 Save</button>
         `;
     } else if (screenId === 'organize') {
         title.innerText = 'Organize Pages';
@@ -129,7 +129,9 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
 
 let canvas = new fabric.Canvas('main-canvas', {
     preserveObjectStacking: true,
-    selection: true
+    selection: true,
+    allowTouchScrolling: false,   // let Fabric handle ALL touch on canvas
+    enablePointerEvents: true,    // use pointer events for better mobile support
 });
 
 let sigCanvas, pdfDoc = null, pageNum = 1, currentZoom = 1;
@@ -294,31 +296,48 @@ function setTool(tool) {
     updateStyle();
 }
 
-// ─── Pinch-to-zoom ───
+// ─── Zoom: pinch (mobile) + ctrl+wheel (desktop) ───
 let initialPinchDistance = null;
+let lastPinchZoom = 1;
 const workspace = document.getElementById('workspace');
 
 workspace.addEventListener('touchstart', (e) => {
-    if (e.touches.length === 2)
+    if (e.touches.length === 2) {
+        e.preventDefault(); // prevent browser zoom
         initialPinchDistance = Math.hypot(
-            e.touches[0].pageX - e.touches[1].pageX,
-            e.touches[0].pageY - e.touches[1].pageY
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
         );
-}, { passive: true });
+        lastPinchZoom = currentZoom;
+    }
+}, { passive: false });
 
 workspace.addEventListener('touchmove', (e) => {
     if (e.touches.length === 2 && initialPinchDistance) {
         e.preventDefault();
         const d = Math.hypot(
-            e.touches[0].pageX - e.touches[1].pageX,
-            e.touches[0].pageY - e.touches[1].pageY
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
         );
-        setZoom(d > initialPinchDistance ? 0.04 : -0.04);
-        initialPinchDistance = d;
+        const scale = d / initialPinchDistance;
+        currentZoom = Math.max(0.15, Math.min(4, lastPinchZoom * scale));
+        applyZoom();
     }
 }, { passive: false });
 
-workspace.addEventListener('touchend', () => { initialPinchDistance = null; });
+workspace.addEventListener('touchend', (e) => {
+    if (e.touches.length < 2) initialPinchDistance = null;
+});
+
+// Ctrl+wheel zoom on desktop (doesn't move the page)
+workspace.addEventListener('wheel', (e) => {
+    if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? -0.08 : 0.08;
+        currentZoom = Math.max(0.15, Math.min(4, currentZoom + delta));
+        applyZoom();
+    }
+}, { passive: false });
 
 // ─── Canvas events ───
 let isDragging = false, lastPosX, lastPosY;
@@ -334,12 +353,17 @@ function setManipulating(val) {
     if (val) {
         workspace.style.overflow = 'hidden';
         workspace.style.touchAction = 'none';
-        isDragging = false; // cancel any pan that may have started
+        isDragging = false;
     } else {
         workspace.style.overflow = 'auto';
         workspace.style.touchAction = '';
     }
 }
+
+// Release manipulation lock when touch ends anywhere
+document.addEventListener('touchend', () => {
+    if (isManipulating) setManipulating(false);
+}, { passive: true });
 
 // ── Definitive scroll-lock for touch devices ──────────────────────
 // Strategy: intercept touchmove on the workspace container itself.
@@ -353,17 +377,28 @@ workspace.addEventListener('touchmove', (e) => {
     }
 }, { passive: false });
 
-// Also block on the canvas container div (parent of Fabric canvases)
-const canvasContainer = document.querySelector('#editor-screen .canvas-container');
-// Use a delegated approach via document capture to catch all canvas touch events
+// Block scroll when manipulating objects - catch at document level
 document.addEventListener('touchmove', (e) => {
     if (!isManipulating) return;
-    // Only block if the touch started inside the editor
     const editorEl = document.getElementById('editor-screen');
     if (editorEl && editorEl.contains(e.target)) {
         e.preventDefault();
     }
 }, { passive: false });
+
+// Fabric needs touch events to reach canvas for object manipulation.
+// Make sure the upper-canvas is not swallowed by workspace scroll.
+// We set allowTouchScrolling=false above, but also need to stop the
+// workspace from grabbing single-finger drag when an object is selected.
+canvas.on('mouse:down', function(opt) {
+    if (opt.target && activeTool === 'pan') {
+        // An object is being touched — immediately mark as potentially manipulating
+        // so the next touchmove doesn't scroll
+        isManipulating = true;
+        workspace.style.overflow = 'hidden';
+        workspace.style.touchAction = 'none';
+    }
+});
 
 canvas.on('mouse:down', function(opt) {
     if (activeTool === 'pan') {
@@ -449,8 +484,8 @@ function enterTextEdit(obj) {
     if (!obj || obj.type !== 'i-text') return;
     canvas.setActiveObject(obj);
     obj.enterEditing();
-    // Clear placeholder text on first edit
-    if (obj.text === 'Tap here to type') { obj.selectAll(); }
+    // Always select all — so typing immediately replaces the text
+    obj.selectAll();
     canvas.renderAll();
     showObjActions(obj);
 }
