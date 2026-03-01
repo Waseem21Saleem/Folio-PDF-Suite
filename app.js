@@ -213,26 +213,30 @@ function hideToolBubble() {
     document.getElementById('tool-bubble').style.display = 'none';
 }
 
-// ─── Floating object action bar (delete/duplicate shown above selected object) ───
+// ─── Floating object action bar ───
+// Positioned INSIDE #workspace (absolute), so it scrolls with the canvas content.
+// We move #obj-actions inside workspace in the HTML via JS on first call.
 function showObjActions(obj) {
-    const bar = document.getElementById('obj-actions');
-    const ws  = document.getElementById('workspace');
+    const bar     = document.getElementById('obj-actions');
     const wrapper = document.getElementById('canvas-wrapper');
 
     if (!obj) { hideObjActions(); return; }
 
-    const wrapperRect = wrapper.getBoundingClientRect();
-    const editorRect  = document.getElementById('editor-screen').getBoundingClientRect();
 
     const bound = obj.getBoundingRect(true);
-    // Object top in page coords → screen coords
-    const objTopScreen  = wrapperRect.top  + bound.top  * currentZoom;
-    const objLeftScreen = wrapperRect.left + bound.left * currentZoom;
-    const objWidth      = bound.width * currentZoom;
 
-    // Convert to editor-relative coords
-    const topInEditor  = objTopScreen  - editorRect.top;
-    const leftInEditor = objLeftScreen - editorRect.left;
+    // Object position in workspace coords (accounting for CSS transform + scroll)
+    // wrapper.style.transform = translate(Xpx,16px) scale(zoom)
+    // So canvas top-left in workspace = (leftShift, 16)
+    const wrapperStyle = wrapper.style.transform || '';
+    const translateMatch = wrapperStyle.match(/translate\((-?\d+\.?\d*)px,\s*(\d+\.?\d*)px\)/);
+    const leftShift = translateMatch ? parseFloat(translateMatch[1]) : 0;
+    const topShift  = translateMatch ? parseFloat(translateMatch[2]) : 16;
+
+    const objLeft = leftShift + bound.left * currentZoom;
+    const objTop  = topShift  + bound.top  * currentZoom;
+    const objW    = bound.width  * currentZoom;
+    const objH    = bound.height * currentZoom;
 
     bar.style.display = 'flex';
 
@@ -240,19 +244,21 @@ function showObjActions(obj) {
         const bw = bar.offsetWidth;
         const bh = bar.offsetHeight;
 
-        let top  = topInEditor - bh - 10;
-        let left = leftInEditor + objWidth / 2 - bw / 2;
+        let top  = objTop - bh - 8;
+        let left = objLeft + objW / 2 - bw / 2;
 
-        // Don't go above screen
-        if (top < 4) top = topInEditor + bound.height * currentZoom + 10;
-        left = Math.max(4, Math.min(left, editorRect.width - bw - 4));
+        if (top < workspace.scrollTop + 4) {
+            top = objTop + objH + 8;
+        }
+
+        const maxLeft = workspace.scrollLeft + workspace.clientWidth - bw - 4;
+        left = Math.max(workspace.scrollLeft + 4, Math.min(left, maxLeft));
 
         bar.style.top  = top  + 'px';
         bar.style.left = left + 'px';
 
-        // Center the arrow
         const arrow = document.getElementById('obj-actions-arrow');
-        const cx = leftInEditor + objWidth / 2 - left;
+        const cx = (objLeft + objW / 2) - left;
         arrow.style.left = Math.max(12, Math.min(cx, bw - 12)) + 'px';
     });
 }
@@ -431,23 +437,38 @@ canvas.on('mouse:up', () => {
     if (activeTool === 'pan') canvas.defaultCursor = 'grab';
 });
 
-// Double-tap detection for mobile — enters text editing on i-text objects
+// Double-tap / double-click to edit text
+// Fabric fires mouse:dblclick on desktop; on mobile we detect two taps < 400ms apart
 let _lastTapTarget = null, _lastTapTime = 0;
+
+function enterTextEdit(obj) {
+    if (!obj || obj.type !== 'i-text') return;
+    canvas.setActiveObject(obj);
+    obj.enterEditing();
+    // Clear placeholder text on first edit
+    if (obj.text === 'Tap here to type') { obj.selectAll(); }
+    canvas.renderAll();
+    showObjActions(obj);
+}
+
+canvas.on('mouse:dblclick', (opt) => {
+    if (opt.target?.type === 'i-text') enterTextEdit(opt.target);
+});
+
 canvas.on('mouse:down', function(tapOpt) {
-    if (activeTool !== 'pan') return;
-    const now = Date.now();
+    const now    = Date.now();
     const target = tapOpt.target;
+
+    // Mobile double-tap
     if (target?.type === 'i-text' && target === _lastTapTarget && (now - _lastTapTime) < 400) {
-        // Double tap on same text object → enter editing
-        canvas.setActiveObject(target);
-        target.enterEditing();
-        target.selectAll();
-        canvas.renderAll();
+        enterTextEdit(target);
         _lastTapTime = 0; _lastTapTarget = null;
         return;
     }
-    _lastTapTarget = target;
-    _lastTapTime = now;
+    if (activeTool === 'pan') {
+        _lastTapTarget = target || null;
+        _lastTapTime   = now;
+    }
 });
 
 // Lock workspace scroll while dragging/scaling/rotating objects
@@ -466,8 +487,20 @@ canvas.on('selection:updated', (opt) => {
     showObjActions(canvas.getActiveObject());
 });
 canvas.on('text:editing:entered', () => {
-    syncToolbar(canvas.getActiveObject());
+    const obj = canvas.getActiveObject();
+    syncToolbar(obj);
+    // Keep action bar visible while editing
+    showObjActions(obj);
 });
+canvas.on('text:editing:exited', () => {
+    showObjActions(canvas.getActiveObject());
+});
+
+// Keep obj-actions in sync when user scrolls
+workspace.addEventListener('scroll', () => {
+    const obj = canvas.getActiveObject();
+    if (obj) showObjActions(obj);
+}, { passive: true });
 canvas.on('selection:cleared', () => {
     hideObjActions();
     // Hide bubble only if not in a drawing tool
@@ -513,76 +546,70 @@ document.getElementById('upload-pdf').addEventListener('change', async (e) => {
     }
 });
 
+// Internal render scale — high DPI quality
+const PDF_QUALITY = 2.0;
+
 async function renderPage(num, autoFit = false) {
-    const page = await pdfDoc.getPage(num);
+    const page   = await pdfDoc.getPage(num);
+    const rawVP  = page.getViewport({ scale: 1 });   // natural size
 
     if (autoFit) {
-        // Wait one frame so workspace has its real dimensions after navigation
-        await new Promise(r => requestAnimationFrame(r));
-        await new Promise(r => requestAnimationFrame(r));
-        fitPageToWorkspace(page);
+        // Wait for layout to settle after screen navigation
+        await new Promise(r => setTimeout(r, 80));
+        const availW = workspace.clientWidth  - 32;
+        const availH = workspace.clientHeight - 32;
+        currentZoom  = Math.min(availW / rawVP.width, availH / rawVP.height);
     }
 
-    // Render PDF at the exact pixel size we want to display
-    // renderScale = currentZoom × 1.5 (1.5 for sharpness on retina)
-    const renderScale = currentZoom * 1.5;
-    const vp = page.getViewport({ scale: renderScale });
+    // Render at high quality internally
+    const hiVP = page.getViewport({ scale: PDF_QUALITY });
+    const tmp  = document.createElement('canvas');
+    tmp.width  = hiVP.width;
+    tmp.height = hiVP.height;
+    await page.render({ canvasContext: tmp.getContext('2d'), viewport: hiVP }).promise;
 
-    const tmp = document.createElement('canvas');
-    tmp.width = vp.width; tmp.height = vp.height;
-    await page.render({ canvasContext: tmp.getContext('2d'), viewport: vp }).promise;
-
-    // Store the base (un-zoomed) dimensions for layout calculations
-    const baseVP = page.getViewport({ scale: currentZoom });
-
+    // Fabric canvas dimensions = natural PDF size (zoom applied via CSS)
     canvas.clear();
-    canvas.setDimensions({ width: baseVP.width, height: baseVP.height });
+    canvas.setDimensions({ width: rawVP.width, height: rawVP.height });
+
     const img = new fabric.Image(tmp, {
-        scaleX: baseVP.width  / vp.width,
-        scaleY: baseVP.height / vp.height,
+        scaleX: rawVP.width  / hiVP.width,
+        scaleY: rawVP.height / hiVP.height,
     });
     canvas.setBackgroundImage(img, () => {
         canvas.renderAll();
         if (pageStates[num]) canvas.loadFromJSON(pageStates[num], canvas.renderAll.bind(canvas));
-        centerCanvas();
+        applyZoom();
     });
 
     document.getElementById('page-info').textContent = `${num}/${pdfDoc.numPages}`;
-    document.getElementById('prev-btn').disabled = num <= 1;
-    document.getElementById('next-btn').disabled = num >= pdfDoc.numPages;
+    document.getElementById('prev-btn').disabled = (num <= 1);
+    document.getElementById('next-btn').disabled = (num >= pdfDoc.numPages);
 }
 
-function fitPageToWorkspace(page) {
-    const availW = workspace.clientWidth  - 32;
-    const availH = workspace.clientHeight - 32;
-    const baseVP = page.getViewport({ scale: 1 });
-    currentZoom = Math.min(availW / baseVP.width, availH / baseVP.height);
-    // No max cap — on mobile currentZoom may be e.g. 0.7, that's fine
-}
-
-function centerCanvas() {
+function applyZoom() {
     const wrapper = document.getElementById('canvas-wrapper');
     const spacer  = document.getElementById('scroll-spacer');
     if (!canvas.width) return;
 
-    // No CSS scale transform — canvas is already rendered at the right size.
-    // Just center it horizontally inside the scroll-spacer.
-    wrapper.style.transform = 'none';
-    wrapper.style.marginLeft = '0';
+    const scaledW = Math.round(canvas.width  * currentZoom);
+    const scaledH = Math.round(canvas.height * currentZoom);
+    const wsW     = workspace.clientWidth;
+    const wsH     = workspace.clientHeight;
 
-    const wsW = workspace.clientWidth;
-    const cw  = canvas.width;
+    // CSS scale from top-left, then shift to center
+    const leftShift = Math.max(0, Math.floor((wsW - scaledW) / 2));
 
-    if (cw < wsW) {
-        // Center by adding left margin
-        wrapper.style.marginLeft = Math.floor((wsW - cw) / 2) + 'px';
-    }
+    wrapper.style.transformOrigin = 'top left';
+    wrapper.style.transform       = `translate(${leftShift}px, 16px) scale(${currentZoom})`;
+    wrapper.style.marginLeft      = '0';
 
-    // Set spacer size so scroll works correctly
-    spacer.style.width  = Math.max(wsW,  cw  + 32) + 'px';
-    spacer.style.height = (canvas.height + 32) + 'px';
+    // Spacer tells scrollbars the real content size
+    spacer.style.width  = Math.max(wsW,  scaledW + leftShift + 16) + 'px';
+    spacer.style.height = (scaledH + 48) + 'px';
 
-    canvas.calcOffset();
+    // Tell Fabric where the canvas really is on screen
+    setTimeout(() => canvas.calcOffset(), 40);
 }
 
 function changePage(offset) {
@@ -597,22 +624,18 @@ function changePage(offset) {
     }
 }
 
-async function updateZoomDisplay() {
-    if (!pdfDoc || !canvas.width) return;
-    // Re-render current page at new zoom level
-    await renderPage(pageNum, false);
+function updateZoomDisplay() {
+    applyZoom();
 }
 
 function setZoom(delta) {
     currentZoom = Math.max(0.15, Math.min(4, currentZoom + delta));
-    updateZoomDisplay();
+    applyZoom();
 }
 
 async function resetZoom() {
     if (!pdfDoc) return;
-    const page = await pdfDoc.getPage(pageNum);
-    fitPageToWorkspace(page);
-    await renderPage(pageNum, false);
+    await renderPage(pageNum, true);   // autoFit=true recalculates zoom and re-centers
 }
 
 function updateStyle() {

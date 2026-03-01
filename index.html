@@ -585,18 +585,7 @@
             border-bottom:1px solid var(--border-strong);transform:translateX(-50%) rotate(45deg);"></div>
     </div>
 
-    <!-- Floating object action bar (shown above selected object) -->
-    <div id="obj-actions" style="display:none;position:absolute;z-index:190;pointer-events:auto;
-        background:var(--surface);border:1px solid var(--border-strong);border-radius:10px;padding:5px 8px;
-        gap:6px;align-items:center;box-shadow:0 4px 20px rgba(0,0,0,0.5);">
-        <button onclick="duplicateSelected()" title="Duplicate"
-            style="background:var(--surface3);border:1px solid var(--border);color:var(--text-muted);padding:5px 10px;border-radius:7px;font-size:13px;cursor:pointer;">⧉</button>
-        <button onclick="deleteSelected()" title="Delete"
-            style="background:rgba(255,71,87,0.12);border:1px solid rgba(255,71,87,0.3);color:var(--danger);padding:5px 10px;border-radius:7px;font-size:13px;cursor:pointer;">🗑</button>
-        <div id="obj-actions-arrow" style="position:absolute;bottom:-7px;left:50%;
-            width:12px;height:12px;background:var(--surface);border-right:1px solid var(--border-strong);
-            border-bottom:1px solid var(--border-strong);transform:translateX(-50%) rotate(45deg);"></div>
-    </div>
+
 
     <div id="workspace" class="no-scroll">
         <div id="editor-placeholder">
@@ -608,6 +597,18 @@
             <div id="canvas-wrapper">
                 <canvas id="main-canvas"></canvas>
             </div>
+        </div>
+        <!-- obj-actions lives inside workspace so it scrolls with canvas content -->
+        <div id="obj-actions" style="display:none;position:absolute;z-index:100;pointer-events:auto;
+            background:var(--surface);border:1px solid var(--border-strong);border-radius:10px;padding:5px 8px;
+            gap:6px;align-items:center;box-shadow:0 4px 20px rgba(0,0,0,0.5);">
+            <button onclick="duplicateSelected()" title="Duplicate"
+                style="background:var(--surface3);border:1px solid var(--border);color:var(--text-muted);padding:5px 10px;border-radius:7px;font-size:13px;cursor:pointer;">⧉</button>
+            <button onclick="deleteSelected()" title="Delete"
+                style="background:rgba(255,71,87,0.12);border:1px solid rgba(255,71,87,0.3);color:var(--danger);padding:5px 10px;border-radius:7px;font-size:13px;cursor:pointer;">🗑</button>
+            <div id="obj-actions-arrow" style="position:absolute;bottom:-7px;left:50%;
+                width:12px;height:12px;background:var(--surface);border-right:1px solid var(--border-strong);
+                border-bottom:1px solid var(--border-strong);transform:translateX(-50%) rotate(45deg);"></div>
         </div>
     </div>
 
