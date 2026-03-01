@@ -77,28 +77,28 @@ function navTo(screenId) {
     if (screenId === 'editor') {
         title.innerText = 'Edit PDF';
         actions.innerHTML = `
-            <button onclick="document.getElementById('upload-pdf').click()" class="btn btn-ghost" style="padding:7px 10px">📂</button>
+            <button onclick="document.getElementById('upload-pdf').click()" class="btn btn-ghost">📂 <span class="btn-label">Open</span></button>
             <div class="page-nav">
                 <button onclick="changePage(-1)" id="prev-btn" disabled>◀</button>
                 <span id="page-info">0/0</span>
                 <button onclick="changePage(1)" id="next-btn" disabled>▶</button>
             </div>
-            <button onclick="openExportModal()" class="btn btn-success" style="padding:7px 10px">💾</button>
+            <button onclick="openExportModal()" class="btn btn-success">💾 <span class="btn-label">Save</span></button>
         `;
     } else if (screenId === 'organize') {
         title.innerText = 'Organize Pages';
-        actions.innerHTML = `<button onclick="openSaveModal('organize')" class="btn btn-success">💾 Save</button>`;
+        actions.innerHTML = `<button onclick="openSaveModal('organize')" class="btn btn-success">💾 <span class="btn-label">Save</span></button>`;
     } else if (screenId === 'merge') {
         title.innerText = 'Merge PDFs';
         actions.innerHTML = `
-            <button onclick="document.getElementById('upload-merge').click()" class="btn btn-ghost">＋ Add PDF</button>
-            <button onclick="openSaveModal('merge')" class="btn btn-success">🔗 Merge</button>
+            <button onclick="document.getElementById('upload-merge').click()" class="btn btn-ghost">＋ <span class="btn-label">Add PDF</span></button>
+            <button onclick="openSaveModal('merge')" class="btn btn-success">🔗 <span class="btn-label">Merge</span></button>
         `;
     } else if (screenId === 'split') {
         title.innerText = 'Extract Pages';
         actions.innerHTML = `
-            <button onclick="selectAllSplitPages()" class="btn btn-ghost">☑ All</button>
-            <button onclick="openSaveModal('split')" class="btn btn-success">✂️ Extract</button>
+            <button onclick="selectAllSplitPages()" class="btn btn-ghost">☑ <span class="btn-label">All</span></button>
+            <button onclick="openSaveModal('split')" class="btn btn-success">✂️ <span class="btn-label">Extract</span></button>
         `;
     }
 }
@@ -497,11 +497,17 @@ document.getElementById('upload-pdf').addEventListener('change', async (e) => {
 
 async function renderPage(num, autoFit = false) {
     const page = await pdfDoc.getPage(num);
+    // Render the internal canvas at 1.5x for quality; currentZoom is the visual scale on top
     const baseVP = page.getViewport({ scale: 1.5 });
 
     if (autoFit) {
-        const avail = workspace.clientWidth - 48;
-        currentZoom = Math.min(avail / baseVP.width, 1.0);
+        // Fit the PDF so it fills the workspace width (with padding), never larger than 1:1
+        const availW = workspace.clientWidth  - 32;
+        const availH = workspace.clientHeight - 40;
+        // currentZoom is applied on top of baseVP dimensions
+        const zoomByW = availW / baseVP.width;
+        const zoomByH = availH / baseVP.height;
+        currentZoom = Math.min(zoomByW, zoomByH, 1.0);
     }
 
     const tmp = document.createElement('canvas');
@@ -564,9 +570,10 @@ function setZoom(delta) {
 }
 
 function resetZoom() {
-    if (!pdfDoc) return;
-    const avail = workspace.clientWidth - 48;
-    if (canvas.width) currentZoom = Math.min(avail / canvas.width, 1.0);
+    if (!pdfDoc || !canvas.width) return;
+    const availW = workspace.clientWidth  - 32;
+    const availH = workspace.clientHeight - 40;
+    currentZoom = Math.min(availW / canvas.width, availH / canvas.height, 1.0);
     updateZoomDisplay();
 }
 
