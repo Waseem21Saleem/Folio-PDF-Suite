@@ -368,7 +368,7 @@ canvas.on('mouse:down', function(opt) {
     } else if (activeTool === 'text') {
         if (opt.target?.type === 'i-text') return;
         const ptr = canvas.getPointer(opt.e);
-        const obj = new fabric.IText('Double-tap to edit', {
+        const obj = new fabric.IText('Tap here to type', {
             left: ptr.x, top: ptr.y,
             fill: document.getElementById('colorPicker').value,
             fontSize: parseInt(document.getElementById('sizePicker').value) || 20,
@@ -377,9 +377,8 @@ canvas.on('mouse:down', function(opt) {
         });
         canvas.add(obj);
         canvas.setActiveObject(obj);
-        canvas.renderAll();           // ← force render so handles appear immediately
+        canvas.renderAll();
         setTool('pan');
-        // Small delay so renderAll completes before we measure bounds for the bubbles
         requestAnimationFrame(() => {
             showObjActions(obj);
             syncToolbar(obj);
@@ -430,6 +429,25 @@ canvas.on('mouse:move', function(opt) {
 canvas.on('mouse:up', () => {
     isDragging = false;
     if (activeTool === 'pan') canvas.defaultCursor = 'grab';
+});
+
+// Double-tap detection for mobile — enters text editing on i-text objects
+let _lastTapTarget = null, _lastTapTime = 0;
+canvas.on('mouse:down', function(tapOpt) {
+    if (activeTool !== 'pan') return;
+    const now = Date.now();
+    const target = tapOpt.target;
+    if (target?.type === 'i-text' && target === _lastTapTarget && (now - _lastTapTime) < 400) {
+        // Double tap on same text object → enter editing
+        canvas.setActiveObject(target);
+        target.enterEditing();
+        target.selectAll();
+        canvas.renderAll();
+        _lastTapTime = 0; _lastTapTarget = null;
+        return;
+    }
+    _lastTapTarget = target;
+    _lastTapTime = now;
 });
 
 // Lock workspace scroll while dragging/scaling/rotating objects
@@ -497,35 +515,74 @@ document.getElementById('upload-pdf').addEventListener('change', async (e) => {
 
 async function renderPage(num, autoFit = false) {
     const page = await pdfDoc.getPage(num);
-    // Render the internal canvas at 1.5x for quality; currentZoom is the visual scale on top
-    const baseVP = page.getViewport({ scale: 1.5 });
 
     if (autoFit) {
-        // Fit the PDF so it fills the workspace width (with padding), never larger than 1:1
-        const availW = workspace.clientWidth  - 32;
-        const availH = workspace.clientHeight - 40;
-        // currentZoom is applied on top of baseVP dimensions
-        const zoomByW = availW / baseVP.width;
-        const zoomByH = availH / baseVP.height;
-        currentZoom = Math.min(zoomByW, zoomByH, 1.0);
+        // Wait one frame so workspace has its real dimensions after navigation
+        await new Promise(r => requestAnimationFrame(r));
+        await new Promise(r => requestAnimationFrame(r));
+        fitPageToWorkspace(page);
     }
 
+    // Render PDF at the exact pixel size we want to display
+    // renderScale = currentZoom × 1.5 (1.5 for sharpness on retina)
+    const renderScale = currentZoom * 1.5;
+    const vp = page.getViewport({ scale: renderScale });
+
     const tmp = document.createElement('canvas');
-    tmp.width = baseVP.width; tmp.height = baseVP.height;
-    await page.render({ canvasContext: tmp.getContext('2d'), viewport: baseVP }).promise;
+    tmp.width = vp.width; tmp.height = vp.height;
+    await page.render({ canvasContext: tmp.getContext('2d'), viewport: vp }).promise;
+
+    // Store the base (un-zoomed) dimensions for layout calculations
+    const baseVP = page.getViewport({ scale: currentZoom });
 
     canvas.clear();
     canvas.setDimensions({ width: baseVP.width, height: baseVP.height });
-    const img = new fabric.Image(tmp);
+    const img = new fabric.Image(tmp, {
+        scaleX: baseVP.width  / vp.width,
+        scaleY: baseVP.height / vp.height,
+    });
     canvas.setBackgroundImage(img, () => {
         canvas.renderAll();
         if (pageStates[num]) canvas.loadFromJSON(pageStates[num], canvas.renderAll.bind(canvas));
-        updateZoomDisplay();
+        centerCanvas();
     });
 
     document.getElementById('page-info').textContent = `${num}/${pdfDoc.numPages}`;
     document.getElementById('prev-btn').disabled = num <= 1;
     document.getElementById('next-btn').disabled = num >= pdfDoc.numPages;
+}
+
+function fitPageToWorkspace(page) {
+    const availW = workspace.clientWidth  - 32;
+    const availH = workspace.clientHeight - 32;
+    const baseVP = page.getViewport({ scale: 1 });
+    currentZoom = Math.min(availW / baseVP.width, availH / baseVP.height);
+    // No max cap — on mobile currentZoom may be e.g. 0.7, that's fine
+}
+
+function centerCanvas() {
+    const wrapper = document.getElementById('canvas-wrapper');
+    const spacer  = document.getElementById('scroll-spacer');
+    if (!canvas.width) return;
+
+    // No CSS scale transform — canvas is already rendered at the right size.
+    // Just center it horizontally inside the scroll-spacer.
+    wrapper.style.transform = 'none';
+    wrapper.style.marginLeft = '0';
+
+    const wsW = workspace.clientWidth;
+    const cw  = canvas.width;
+
+    if (cw < wsW) {
+        // Center by adding left margin
+        wrapper.style.marginLeft = Math.floor((wsW - cw) / 2) + 'px';
+    }
+
+    // Set spacer size so scroll works correctly
+    spacer.style.width  = Math.max(wsW,  cw  + 32) + 'px';
+    spacer.style.height = (canvas.height + 32) + 'px';
+
+    canvas.calcOffset();
 }
 
 function changePage(offset) {
@@ -540,28 +597,10 @@ function changePage(offset) {
     }
 }
 
-function updateZoomDisplay() {
-    const wrapper = document.getElementById('canvas-wrapper');
-    const spacer  = document.getElementById('scroll-spacer');
-    if (!canvas.width) return;
-
-    const scaledW = canvas.width  * currentZoom;
-    const scaledH = canvas.height * currentZoom;
-
-    // Scale the canvas visually
-    wrapper.style.transform       = `scale(${currentZoom})`;
-    wrapper.style.transformOrigin = 'top left';
-
-    // Make scroll-spacer large enough to scroll through the whole scaled canvas.
-    // Center horizontally: if scaled canvas < workspace width, add side margins.
-    const wsW = workspace.clientWidth;
-    const leftOffset = Math.max(16, (wsW - scaledW) / 2);
-    wrapper.style.marginLeft = leftOffset + 'px';
-
-    spacer.style.width    = Math.max(wsW, scaledW + leftOffset + 16) + 'px';
-    spacer.style.height   = scaledH + 'px';
-
-    setTimeout(() => canvas.calcOffset(), 30);
+async function updateZoomDisplay() {
+    if (!pdfDoc || !canvas.width) return;
+    // Re-render current page at new zoom level
+    await renderPage(pageNum, false);
 }
 
 function setZoom(delta) {
@@ -569,12 +608,11 @@ function setZoom(delta) {
     updateZoomDisplay();
 }
 
-function resetZoom() {
-    if (!pdfDoc || !canvas.width) return;
-    const availW = workspace.clientWidth  - 32;
-    const availH = workspace.clientHeight - 40;
-    currentZoom = Math.min(availW / canvas.width, availH / canvas.height, 1.0);
-    updateZoomDisplay();
+async function resetZoom() {
+    if (!pdfDoc) return;
+    const page = await pdfDoc.getPage(pageNum);
+    fitPageToWorkspace(page);
+    await renderPage(pageNum, false);
 }
 
 function updateStyle() {
