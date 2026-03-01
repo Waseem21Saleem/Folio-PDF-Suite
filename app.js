@@ -324,32 +324,41 @@ function setManipulating(val) {
     if (val) {
         workspace.style.overflow = 'hidden';
         workspace.style.touchAction = 'none';
+        isDragging = false; // cancel any pan that may have started
     } else {
         workspace.style.overflow = 'auto';
-        workspace.style.touchAction = 'pan-x pan-y';
+        workspace.style.touchAction = '';
     }
 }
 
-// Wait for Fabric to finish initializing then grab upper-canvas
-setTimeout(() => {
-    const uc = document.querySelector('.upper-canvas');
-    if (uc) {
-        uc.addEventListener('touchstart', (e) => {
-            if (canvas.getActiveObject()) {
-                // Don't prevent here - let fabric handle it
-                // but mark that we might start manipulating
-            }
-        }, { passive: true });
-
-        uc.addEventListener('touchmove', (e) => {
-            // Always prevent default on upper-canvas so iOS rubber-banding/scroll stops
-            e.preventDefault();
-        }, { passive: false });
+// ── Definitive scroll-lock for touch devices ──────────────────────
+// Strategy: intercept touchmove on the workspace container itself.
+// When isManipulating is true (object being dragged/scaled/rotated),
+// we call preventDefault() on every touchmove that reaches the workspace.
+// This stops iOS scroll completely without relying on Fabric internals.
+workspace.addEventListener('touchmove', (e) => {
+    if (isManipulating) {
+        e.preventDefault();
+        e.stopPropagation();
     }
-}, 100);
+}, { passive: false });
+
+// Also block on the canvas container div (parent of Fabric canvases)
+const canvasContainer = document.querySelector('#editor-screen .canvas-container');
+// Use a delegated approach via document capture to catch all canvas touch events
+document.addEventListener('touchmove', (e) => {
+    if (!isManipulating) return;
+    // Only block if the touch started inside the editor
+    const editorEl = document.getElementById('editor-screen');
+    if (editorEl && editorEl.contains(e.target)) {
+        e.preventDefault();
+    }
+}, { passive: false });
 
 canvas.on('mouse:down', function(opt) {
     if (activeTool === 'pan') {
+        // Don't start panning if the user clicked on a selected object
+        if (opt.target) return;
         if (!opt.e.touches || opt.e.touches.length === 1) {
             isDragging = true;
             canvas.defaultCursor = 'grabbing';
@@ -368,12 +377,13 @@ canvas.on('mouse:down', function(opt) {
         });
         canvas.add(obj);
         canvas.setActiveObject(obj);
-        // Do NOT enter editing immediately - show the bounding box + handles first
-        // so the user can move/resize before typing. Double-click will enter edit mode.
+        canvas.renderAll();           // ← force render so handles appear immediately
         setTool('pan');
-        // Show obj-actions and prop bubble right away
-        showObjActions(obj);
-        syncToolbar(obj);
+        // Small delay so renderAll completes before we measure bounds for the bubbles
+        requestAnimationFrame(() => {
+            showObjActions(obj);
+            syncToolbar(obj);
+        });
     } else if (activeTool === 'shape') {
         const ptr = canvas.getPointer(opt.e);
         const rect = new fabric.Rect({
