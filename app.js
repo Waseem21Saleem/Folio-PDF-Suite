@@ -145,10 +145,48 @@ function openTransferModal() {
 // ─── Buffer Generators for Transfer ───
 async function generatePdfBytesFromEditor() {
     pageStates[pageNum] = JSON.stringify(canvas);
+
+    if (originalPdfBytes) {
+        const pdfLibDoc = await PDFLib.PDFDocument.load(originalPdfBytes);
+        const libPages = pdfLibDoc.getPages();
+
+        for (let i = 1; i <= pdfDoc.numPages; i++) {
+            const state = pageStates[i];
+            if (!state) continue;
+
+            const parsed = JSON.parse(state);
+            if (!parsed.objects || parsed.objects.length === 0) continue;
+
+            const page = await pdfDoc.getPage(i);
+            const vp = page.getViewport({ scale: 1 });
+            const sc = new fabric.StaticCanvas(null, { width: vp.width, height: vp.height });
+
+            await new Promise(res => {
+                sc.loadFromJSON(state, () => {
+                    sc.backgroundImage = null; // strip old background
+                    sc.renderAll();
+                    res();
+                });
+            });
+
+            const pngDataUrl = sc.toDataURL('image/png');
+            const b64 = pngDataUrl.split(',')[1];
+            if (!b64) continue;
+            
+            const pngBytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+            const pngImage = await pdfLibDoc.embedPng(pngBytes);
+
+            const libPage = libPages[i - 1];
+            const { width, height } = libPage.getSize();
+            libPage.drawImage(pngImage, { x: 0, y: 0, width, height });
+        }
+        return await pdfLibDoc.save();
+    }
+
     let pdf = null;
     for (let i = 1; i <= pdfDoc.numPages; i++) {
         const page = await pdfDoc.getPage(i);
-        const vp = page.getViewport({ scale: 2 });
+        const vp = page.getViewport({ scale: 1 });
         const tmp = document.createElement('canvas');
         tmp.width = vp.width; tmp.height = vp.height;
         await page.render({ canvasContext: tmp.getContext('2d'), viewport: vp }).promise;
