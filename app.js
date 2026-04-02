@@ -1,5 +1,17 @@
+// Fix for older libraries using 'alphabetical' text baseline
+const originalTextBaseline = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'textBaseline');
+if (originalTextBaseline) {
+    Object.defineProperty(CanvasRenderingContext2D.prototype, 'textBaseline', {
+        get: function() { return originalTextBaseline.get.call(this); },
+        set: function(val) {
+            if (val === 'alphabetical') val = 'alphabetic';
+            originalTextBaseline.set.call(this, val);
+        }
+    });
+}
+
 if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    navigator.serviceWorker.register('./sw.js').catch(() => { });
 }
 
 let deferredPrompt;
@@ -36,7 +48,7 @@ function showLoader(text = 'Processing...') {
     document.getElementById('loader-overlay').classList.add('visible');
 }
 function hideLoader() { document.getElementById('loader-overlay').classList.remove('visible'); }
-function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
 let _toastTimer;
@@ -78,8 +90,8 @@ function navTo(screenId) {
     document.getElementById(screenId + '-screen').classList.add('active');
     currentScreen = screenId;
 
-    const header  = document.getElementById('tool-header');
-    const title   = document.getElementById('tool-title');
+    const header = document.getElementById('tool-header');
+    const title = document.getElementById('tool-title');
     const actions = document.getElementById('header-actions');
 
     if (screenId === 'home') { header.classList.remove('visible'); return; }
@@ -136,8 +148,8 @@ async function generatePdfBytesFromEditor() {
     let pdf = null;
     for (let i = 1; i <= pdfDoc.numPages; i++) {
         const page = await pdfDoc.getPage(i);
-        const vp   = page.getViewport({ scale: 2 });
-        const tmp  = document.createElement('canvas');
+        const vp = page.getViewport({ scale: 2 });
+        const tmp = document.createElement('canvas');
         tmp.width = vp.width; tmp.height = vp.height;
         await page.render({ canvasContext: tmp.getContext('2d'), viewport: vp }).promise;
         const sc = new fabric.StaticCanvas(null, { width: vp.width, height: vp.height });
@@ -148,7 +160,7 @@ async function generatePdfBytesFromEditor() {
             });
         });
         const imgData = sc.toDataURL('image/jpeg', 0.85);
-        const orient  = vp.width > vp.height ? 'l' : 'p';
+        const orient = vp.width > vp.height ? 'l' : 'p';
         if (i === 1) pdf = new jsPDF({ orientation: orient, unit: 'px', format: [vp.width, vp.height] });
         else pdf.addPage([vp.width, vp.height], orient);
         pdf.addImage(imgData, 'JPEG', 0, 0, vp.width, vp.height);
@@ -170,19 +182,19 @@ async function executeTransfer(targetScreen) {
             bufferData = await generatePdfBytesFromEditor();
         } else if (currentScreen === 'organize') {
             const newPdf = await PDFLib.PDFDocument.create();
-            const pages  = await newPdf.copyPages(orgPdfDoc, orgPageArray);
+            const pages = await newPdf.copyPages(orgPdfDoc, orgPageArray);
             pages.forEach(p => newPdf.addPage(p));
             bufferData = await newPdf.save();
         } else if (currentScreen === 'split') {
             const newPdf = await PDFLib.PDFDocument.create();
             const sorted = [...splitSelectedPages].sort((a, b) => a - b);
-            const pages  = await newPdf.copyPages(orgPdfDoc, sorted);
+            const pages = await newPdf.copyPages(orgPdfDoc, sorted);
             pages.forEach(p => newPdf.addPage(p));
             bufferData = await newPdf.save();
         } else if (currentScreen === 'merge') {
             const merged = await PDFLib.PDFDocument.create();
             for (const file of mergeFiles) {
-                const ab  = await readFileAsArrayBuffer(file);
+                const ab = await readFileAsArrayBuffer(file);
                 const pdf = await PDFLib.PDFDocument.load(ab);
                 const pgs = await merged.copyPages(pdf, pdf.getPageIndices());
                 pgs.forEach(p => merged.addPage(p));
@@ -190,32 +202,32 @@ async function executeTransfer(targetScreen) {
             bufferData = await merged.save();
         }
 
-        const arrayBuf = bufferData.buffer || bufferData; 
+        const arrayBuf = bufferData.buffer || bufferData;
         navTo(targetScreen);
 
         if (targetScreen === 'editor') {
             originalPdfBytes = arrayBuf;
-            pdfDoc = await pdfjsLib.getDocument(new Uint8Array(arrayBuf)).promise;
+            pdfDoc = await pdfjsLib.getDocument(new Uint8Array(arrayBuf.slice(0))).promise;
             pageNum = 1; pageStates = {}; isDirty = true;
             document.getElementById('editor-placeholder').style.display = 'none';
             document.getElementById('canvas-wrapper').style.display = 'block';
             await renderPage(pageNum, true);
         } else if (targetScreen === 'organize') {
-            orgPdfDoc   = await PDFLib.PDFDocument.load(arrayBuf);
-            orgPdfJsDoc = await pdfjsLib.getDocument(new Uint8Array(arrayBuf)).promise;
+            orgPdfDoc = await PDFLib.PDFDocument.load(arrayBuf);
+            orgPdfJsDoc = await pdfjsLib.getDocument(new Uint8Array(arrayBuf.slice(0))).promise;
             orgPageArray = Array.from({ length: orgPdfJsDoc.numPages }, (_, i) => i);
             document.getElementById('org-upload-box').style.display = 'none';
             isDirty = true;
             await renderOrganizeGrid();
         } else if (targetScreen === 'split') {
-            orgPdfDoc   = await PDFLib.PDFDocument.load(arrayBuf);
-            orgPdfJsDoc = await pdfjsLib.getDocument(new Uint8Array(arrayBuf)).promise;
+            orgPdfDoc = await PDFLib.PDFDocument.load(arrayBuf);
+            orgPdfJsDoc = await pdfjsLib.getDocument(new Uint8Array(arrayBuf.slice(0))).promise;
             splitSelectedPages.clear();
             document.getElementById('split-upload-box').style.display = 'none';
             isDirty = true;
             await renderSplitGrid();
         } else if (targetScreen === 'merge') {
-            const f = new File([arrayBuf], "Transferred_Document.pdf", {type: "application/pdf"});
+            const f = new File([arrayBuf], "Transferred_Document.pdf", { type: "application/pdf" });
             mergeFiles.push(f);
             isDirty = true;
             renderMergeList();
@@ -261,7 +273,7 @@ let undoStack = [], redoStack = [];
 let _suppressUndo = false;
 let currentRawViewport = null;
 let currentPageTextContent = null;
-let bgCanvasData = null; 
+let bgCanvasData = null;
 let originalPdfBytes = null;
 const PDF_QUALITY = 2.0;
 
@@ -286,10 +298,10 @@ function redo() {
     isDirty = true;
 }
 
-canvas.on('object:added',    () => { isDirty = true; pushUndo(); });
+canvas.on('object:added', () => { isDirty = true; pushUndo(); });
 canvas.on('object:modified', () => { isDirty = true; pushUndo(); });
-canvas.on('object:removed',  () => { isDirty = true; pushUndo(); });
-canvas.on('path:created', function(opt) {
+canvas.on('object:removed', () => { isDirty = true; pushUndo(); });
+canvas.on('path:created', function (opt) {
     isDirty = true;
     if (activeTool === 'highlighter') { opt.path.globalCompositeOperation = 'multiply'; canvas.renderAll(); }
 });
@@ -312,7 +324,7 @@ function toggleTextProp(prop, onVal, offVal) {
     const btn = document.getElementById(btnMap[prop]);
     const isActive = btn.classList.contains('active');
     const newVal = isActive ? offVal : onVal;
-    
+
     if (isActive) btn.classList.remove('active');
     else btn.classList.add('active');
 
@@ -338,7 +350,7 @@ function showToolBubble(toolName) {
     document.getElementById('shape-wrap').style.display = (toolName === 'shape' || toolName === 'selected-shape') ? 'flex' : 'none';
 
     let btn = document.getElementById('tool-' + toolName);
-    if (!btn && toolName.includes('selected')) btn = document.getElementById('tool-pan'); 
+    if (!btn && toolName.includes('selected')) btn = document.getElementById('tool-pan');
 
     const editorRect = document.getElementById('editor-screen').getBoundingClientRect();
     if (btn) {
@@ -372,18 +384,18 @@ function showObjActions(obj) {
     const wrapperRect = wrapper.getBoundingClientRect();
     const workspaceRect = workspace.getBoundingClientRect();
     const wrapperLeft = wrapperRect.left - workspaceRect.left + workspace.scrollLeft;
-    const wrapperTop  = wrapperRect.top  - workspaceRect.top  + workspace.scrollTop;
+    const wrapperTop = wrapperRect.top - workspaceRect.top + workspace.scrollTop;
 
     const objLeft = wrapperLeft + bound.left * currentZoom;
-    const objTop  = wrapperTop  + bound.top  * currentZoom;
-    const objW    = bound.width  * currentZoom;
-    const objH    = bound.height * currentZoom;
+    const objTop = wrapperTop + bound.top * currentZoom;
+    const objW = bound.width * currentZoom;
+    const objH = bound.height * currentZoom;
 
     bar.style.display = 'flex';
 
     requestAnimationFrame(() => {
         const bw = bar.offsetWidth;
-        let top = objTop + objH + 16; 
+        let top = objTop + objH + 16;
         let left = objLeft + objW / 2 - bw / 2;
 
         if (top + bar.offsetHeight > workspace.scrollTop + workspace.clientHeight) {
@@ -399,7 +411,7 @@ function showObjActions(obj) {
 
         const maxLeft = workspace.scrollLeft + workspace.clientWidth - bw - 4;
         left = Math.max(workspace.scrollLeft + 4, Math.min(left, maxLeft));
-        bar.style.top  = top  + 'px';
+        bar.style.top = top + 'px';
         bar.style.left = left + 'px';
         const arrow = document.getElementById('obj-actions-arrow');
         const cx = (objLeft + objW / 2) - left;
@@ -415,7 +427,7 @@ function setTool(tool) {
     if (btn) btn.classList.add('active');
 
     canvas.isDrawingMode = (tool === 'pen' || tool === 'highlighter');
-    
+
     if (tool === 'pan') canvas.defaultCursor = 'grab';
     else if (tool === 'text') canvas.defaultCursor = 'text';
     else if (tool === 'sig-place') {
@@ -442,20 +454,20 @@ function activateTextScan() {
 // ─── Zoom & Page Navigation ───
 function applyZoom() {
     const wrapper = document.getElementById('canvas-wrapper');
-    const spacer  = document.getElementById('scroll-spacer');
+    const spacer = document.getElementById('scroll-spacer');
     if (!canvas.width) return;
 
-    const scaledW = canvas.width  * currentZoom;
+    const scaledW = canvas.width * currentZoom;
     const scaledH = canvas.height * currentZoom;
 
     // transform-origin: top left + negative margins = layout box matches visual size
-    wrapper.style.transform       = `scale(${currentZoom})`;
+    wrapper.style.transform = `scale(${currentZoom})`;
     wrapper.style.transformOrigin = 'top left';
-    wrapper.style.marginRight     = (scaledW - canvas.width)  + 'px'; // negative when zoom < 1
-    wrapper.style.marginBottom    = (scaledH - canvas.height) + 'px';
+    wrapper.style.marginRight = (scaledW - canvas.width) + 'px'; // negative when zoom < 1
+    wrapper.style.marginBottom = (scaledH - canvas.height) + 'px';
 
     // Drive the scroll area from the visual (scaled) size
-    spacer.style.minWidth  = (scaledW + 32) + 'px';
+    spacer.style.minWidth = (scaledW + 32) + 'px';
     spacer.style.minHeight = (scaledH + 32) + 'px';
 
     setTimeout(() => canvas.calcOffset(), 40);
@@ -521,7 +533,7 @@ function setManipulating(val) {
     else workspace.style.overflow = 'auto';
 }
 
-canvas.on('mouse:down', function(opt) {
+canvas.on('mouse:down', function (opt) {
     const ptr = canvas.getPointer(opt.e);
 
     if (isTextScanningMode) {
@@ -562,16 +574,16 @@ canvas.on('mouse:down', function(opt) {
         let obj;
 
         if (currentShapeType === 'rect') {
-            obj = new fabric.Rect({ left: ptr.x-50, top: ptr.y-30, width: 100, height: 60, fill: 'transparent', stroke: color, strokeWidth: strokeW });
+            obj = new fabric.Rect({ left: ptr.x - 50, top: ptr.y - 30, width: 100, height: 60, fill: 'transparent', stroke: color, strokeWidth: strokeW });
         } else if (currentShapeType === 'circle') {
-            obj = new fabric.Circle({ left: ptr.x-40, top: ptr.y-40, radius: 40, fill: 'transparent', stroke: color, strokeWidth: strokeW });
+            obj = new fabric.Circle({ left: ptr.x - 40, top: ptr.y - 40, radius: 40, fill: 'transparent', stroke: color, strokeWidth: strokeW });
         } else if (currentShapeType === 'triangle') {
-            obj = new fabric.Triangle({ left: ptr.x-40, top: ptr.y-40, width: 80, height: 80, fill: 'transparent', stroke: color, strokeWidth: strokeW });
+            obj = new fabric.Triangle({ left: ptr.x - 40, top: ptr.y - 40, width: 80, height: 80, fill: 'transparent', stroke: color, strokeWidth: strokeW });
         } else if (currentShapeType === 'line') {
             obj = new fabric.Line([ptr.x, ptr.y, ptr.x + 100, ptr.y], { stroke: color, strokeWidth: strokeW });
         }
 
-        if(obj) { canvas.add(obj); canvas.setActiveObject(obj); }
+        if (obj) { canvas.add(obj); canvas.setActiveObject(obj); }
         setTool('pan');
     } else if (activeTool === 'sig-place') {
         setTool('pan');
@@ -586,14 +598,14 @@ canvas.on('mouse:down', function(opt) {
     }
 });
 
-canvas.on('mouse:move', function(opt) {
+canvas.on('mouse:move', function (opt) {
     if (isDragging && activeTool === 'pan') {
-        const e  = opt.e;
+        const e = opt.e;
         const cx = e.clientX ?? e.touches?.[0].clientX;
         const cy = e.clientY ?? e.touches?.[0].clientY;
         if (cx !== undefined) {
             workspace.scrollLeft -= (cx - lastPosX);
-            workspace.scrollTop  -= (cy - lastPosY);
+            workspace.scrollTop -= (cy - lastPosY);
             lastPosX = cx; lastPosY = cy;
         }
     }
@@ -643,10 +655,10 @@ function executeClickScan(x, y) {
         let maxColor = "#000000";
         let maxCount = 0;
 
-        for(let i=0; i<imgData.length; i+=4) {
-            let r = imgData[i], g = imgData[i+1], b = imgData[i+2], a = imgData[i+3];
+        for (let i = 0; i < imgData.length; i += 4) {
+            let r = imgData[i], g = imgData[i + 1], b = imgData[i + 2], a = imgData[i + 3];
             if (a > 100 && (r < 240 || g < 240 || b < 240)) {
-                let hex = rgbToHex(r,g,b);
+                let hex = rgbToHex(r, g, b);
                 colorCounts[hex] = (colorCounts[hex] || 0) + 1;
                 if (colorCounts[hex] > maxCount) {
                     maxCount = colorCounts[hex];
@@ -659,7 +671,7 @@ function executeClickScan(x, y) {
 
     isTextScanningMode = false;
     canvas.defaultCursor = 'text';
-    
+
     if (foundText) {
         document.getElementById('sizePicker').value = detectedSize;
         document.getElementById('fontFamily').value = detectedFont;
@@ -689,7 +701,7 @@ canvas.on('mouse:dblclick', (opt) => {
     if (opt.target?.type === 'i-text') enterTextEdit(opt.target);
 });
 
-canvas.on('mouse:down', function(tapOpt) {
+canvas.on('mouse:down', function (tapOpt) {
     const now = Date.now();
     const target = tapOpt.target;
     if (target?.type === 'i-text' && target === _lastTapTarget && (now - _lastTapTime) < 400) {
@@ -699,12 +711,12 @@ canvas.on('mouse:down', function(tapOpt) {
     }
     if (activeTool === 'pan') {
         _lastTapTarget = target || null;
-        _lastTapTime   = now;
+        _lastTapTime = now;
     }
 });
 
-canvas.on('object:moving',   (opt) => { showObjActions(opt.target); });
-canvas.on('object:scaling',  (opt) => { showObjActions(opt.target); });
+canvas.on('object:moving', (opt) => { showObjActions(opt.target); });
+canvas.on('object:scaling', (opt) => { showObjActions(opt.target); });
 canvas.on('object:rotating', (opt) => { showObjActions(opt.target); });
 
 canvas.on('selection:created', (opt) => {
@@ -737,12 +749,12 @@ canvas.on('selection:cleared', () => {
 function syncToolbar(obj) {
     obj = obj || canvas.getActiveObject();
     if (!obj) return;
-    
+
     if (obj.type === 'i-text') {
         updateMainColor(obj.fill || '#000000');
-        document.getElementById('sizePicker').value  = obj.fontSize || 20;
-        document.getElementById('fontFamily').value  = obj.fontFamily || 'Arial';
-        
+        document.getElementById('sizePicker').value = obj.fontSize || 20;
+        document.getElementById('fontFamily').value = obj.fontFamily || 'Arial';
+
         const btnB = document.getElementById('btn-bold');
         const btnI = document.getElementById('btn-italic');
         const btnU = document.getElementById('btn-underline');
@@ -764,7 +776,7 @@ document.getElementById('upload-pdf').addEventListener('change', async (e) => {
         showLoader('Loading PDF...');
         const ab = await readFileAsArrayBuffer(file);
         originalPdfBytes = ab;
-        pdfDoc = await pdfjsLib.getDocument(new Uint8Array(ab)).promise;
+        pdfDoc = await pdfjsLib.getDocument(new Uint8Array(ab.slice(0))).promise;
         pageNum = 1; pageStates = {}; isDirty = false; undoStack = []; redoStack = [];
         document.getElementById('editor-placeholder').style.display = 'none';
         document.getElementById('canvas-wrapper').style.display = 'block';
@@ -780,27 +792,27 @@ document.getElementById('upload-pdf').addEventListener('change', async (e) => {
 });
 
 async function renderPage(num, autoFit = false) {
-    const page   = await pdfDoc.getPage(num);
+    const page = await pdfDoc.getPage(num);
     currentRawViewport = page.getViewport({ scale: 1 });
     currentPageTextContent = await page.getTextContent();
 
     if (autoFit) {
-    // double-rAF guarantees layout is fully computed before reading dimensions
-    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-    const availW = workspace.clientWidth  - 32;
-    const availH = workspace.clientHeight - 32;
-    if (availW > 10 && availH > 10) {
-        const scaleToFit = Math.min(availW / currentRawViewport.width,
-                                    availH / currentRawViewport.height);
-        currentZoom = Math.min(Math.max(scaleToFit, 0.2), 1.5);
-    } else {
-        currentZoom = 1.0;
+        // double-rAF guarantees layout is fully computed before reading dimensions
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const availW = workspace.clientWidth - 32;
+        const availH = workspace.clientHeight - 32;
+        if (availW > 10 && availH > 10) {
+            const scaleToFit = Math.min(availW / currentRawViewport.width,
+                availH / currentRawViewport.height);
+            currentZoom = Math.min(Math.max(scaleToFit, 0.2), 1.5);
+        } else {
+            currentZoom = 1.0;
+        }
     }
-}
 
     const hiVP = page.getViewport({ scale: PDF_QUALITY });
-    const tmp  = document.createElement('canvas');
-    tmp.width  = hiVP.width;
+    const tmp = document.createElement('canvas');
+    tmp.width = hiVP.width;
     tmp.height = hiVP.height;
     bgCanvasData = tmp.getContext('2d', { willReadFrequently: true });
     await page.render({ canvasContext: bgCanvasData, viewport: hiVP }).promise;
@@ -809,10 +821,10 @@ async function renderPage(num, autoFit = false) {
     canvas.setDimensions({ width: currentRawViewport.width, height: currentRawViewport.height });
 
     const img = new fabric.Image(tmp, {
-        scaleX: currentRawViewport.width  / hiVP.width,
+        scaleX: currentRawViewport.width / hiVP.width,
         scaleY: currentRawViewport.height / hiVP.height,
     });
-    
+
     canvas.setBackgroundImage(img, () => {
         canvas.renderAll();
         if (pageStates[num]) canvas.loadFromJSON(pageStates[num], canvas.renderAll.bind(canvas));
@@ -826,8 +838,8 @@ async function renderPage(num, autoFit = false) {
 
 function updateStyle() {
     const color = document.getElementById('colorPicker').value;
-    const size  = parseInt(document.getElementById('sizePicker').value) || 20;
-    const font  = document.getElementById('fontFamily').value;
+    const size = parseInt(document.getElementById('sizePicker').value) || 20;
+    const font = document.getElementById('fontFamily').value;
     const active = canvas.getActiveObject();
 
     const isBold = document.getElementById('btn-bold')?.classList.contains('active');
@@ -835,9 +847,9 @@ function updateStyle() {
     const isUnderline = document.getElementById('btn-underline')?.classList.contains('active');
 
     if (active?.type === 'i-text') {
-        active.set({ 
-            fill: color, 
-            fontSize: size, 
+        active.set({
+            fill: color,
+            fontSize: size,
             fontFamily: font,
             fontWeight: isBold ? 'bold' : 'normal',
             fontStyle: isItalic ? 'italic' : 'normal',
@@ -856,7 +868,7 @@ function updateStyle() {
     }
 
     if (activeTool === 'highlighter') {
-        const r = parseInt(color.substr(1,2),16), g = parseInt(color.substr(3,2),16), b = parseInt(color.substr(5,2),16);
+        const r = parseInt(color.substr(1, 2), 16), g = parseInt(color.substr(3, 2), 16), b = parseInt(color.substr(5, 2), 16);
         canvas.freeDrawingBrush.color = `rgba(${r},${g},${b},0.35)`;
         canvas.freeDrawingBrush.width = size * 1.8;
     } else {
@@ -892,7 +904,7 @@ function handleImageUpload(e) {
     reader.onload = f => {
         fabric.Image.fromURL(f.target.result, img => {
             img.scaleToWidth(Math.min(200, canvas.width * 0.4));
-            img.set({ left: canvas.width/2, top: canvas.height/2, originX: 'center', originY: 'center' });
+            img.set({ left: canvas.width / 2, top: canvas.height / 2, originX: 'center', originY: 'center' });
             canvas.add(img); canvas.setActiveObject(img);
             setTool('pan'); isDirty = true;
         });
@@ -918,7 +930,7 @@ function saveSignature() {
             img.set({ left: _pendingSigCenter.x, top: _pendingSigCenter.y, originX: 'center', originY: 'center' });
             _pendingSigCenter = null;
         } else {
-            img.set({ left: canvas.width/2, top: canvas.height * 0.75, originX: 'center', originY: 'center' });
+            img.set({ left: canvas.width / 2, top: canvas.height * 0.75, originX: 'center', originY: 'center' });
         }
 
         canvas.add(img); canvas.setActiveObject(img);
@@ -929,12 +941,12 @@ function saveSignature() {
 }
 
 const STAMPS = [
-    { label: 'APPROVED',     bg: '#16a34a' },
-    { label: 'REJECTED',     bg: '#dc2626' },
-    { label: 'DRAFT',        bg: '#ca8a04' },
+    { label: 'APPROVED', bg: '#16a34a' },
+    { label: 'REJECTED', bg: '#dc2626' },
+    { label: 'DRAFT', bg: '#ca8a04' },
     { label: 'CONFIDENTIAL', bg: '#7c3aed' },
-    { label: 'REVIEWED',     bg: '#0284c7' },
-    { label: 'SIGNED',       bg: '#0f766e' },
+    { label: 'REVIEWED', bg: '#0284c7' },
+    { label: 'SIGNED', bg: '#0f766e' },
 ];
 
 function insertStamp() {
@@ -949,7 +961,7 @@ function insertStamp() {
         btn.textContent = s.label;
         btn.onclick = () => {
             const text = new fabric.Text(s.label, {
-                left: canvas.width/2, top: canvas.height/2,
+                left: canvas.width / 2, top: canvas.height / 2,
                 originX: 'center', originY: 'center',
                 fill: s.bg, fontSize: 36, fontFamily: 'Impact',
                 opacity: 0.8, stroke: s.bg, strokeWidth: 1, angle: -15,
@@ -970,7 +982,7 @@ function insertCustomStamp() {
     if (!textVal) return showToast("Enter stamp text");
 
     const text = new fabric.Text(textVal.toUpperCase(), {
-        left: canvas.width/2, top: canvas.height/2,
+        left: canvas.width / 2, top: canvas.height / 2,
         originX: 'center', originY: 'center',
         fill: colorVal, fontSize: 36, fontFamily: 'Impact',
         opacity: 0.8, stroke: colorVal, strokeWidth: 1, angle: -15,
@@ -990,14 +1002,14 @@ function openExportModal() {
 async function executeExport() {
     closeModal('export-modal');
     showLoader('Exporting...');
-    const name   = document.getElementById('export-name').value   || 'Edited_Document';
+    const name = document.getElementById('export-name').value || 'Edited_Document';
     const format = document.getElementById('export-format').value;
     await new Promise(r => setTimeout(r, 50));
 
     try {
         if (format === 'png') {
             const a = document.createElement('a');
-            a.href     = canvas.toDataURL({ format: 'png', quality: 1 });
+            a.href = canvas.toDataURL({ format: 'png', quality: 1 });
             a.download = name + '.png';
             a.click();
             showToast('Page exported as PNG ✓');
@@ -1008,7 +1020,7 @@ async function executeExport() {
             if (originalPdfBytes) {
                 // ── Preferred path: overlay annotations on the original PDF ──
                 const pdfLibDoc = await PDFLib.PDFDocument.load(originalPdfBytes);
-                const libPages  = pdfLibDoc.getPages();
+                const libPages = pdfLibDoc.getPages();
 
                 for (let i = 1; i <= pdfDoc.numPages; i++) {
                     const state = pageStates[i];
@@ -1019,8 +1031,8 @@ async function executeExport() {
 
                     // Render only the annotation objects (no background) at 1× scale
                     const page = await pdfDoc.getPage(i);
-                    const vp   = page.getViewport({ scale: 1 });
-                    const sc   = new fabric.StaticCanvas(null, { width: vp.width, height: vp.height });
+                    const vp = page.getViewport({ scale: 1 });
+                    const sc = new fabric.StaticCanvas(null, { width: vp.width, height: vp.height });
 
                     await new Promise(res => {
                         sc.loadFromJSON(state, () => {
@@ -1032,11 +1044,11 @@ async function executeExport() {
 
                     // Embed transparent annotation PNG into the original page
                     const pngDataUrl = sc.toDataURL('image/png');
-                    const b64        = pngDataUrl.split(',')[1];
-                    const pngBytes   = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-                    const pngImage   = await pdfLibDoc.embedPng(pngBytes);
+                    const b64 = pngDataUrl.split(',')[1];
+                    const pngBytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+                    const pngImage = await pdfLibDoc.embedPng(pngBytes);
 
-                    const libPage        = libPages[i - 1];
+                    const libPage = libPages[i - 1];
                     const { width, height } = libPage.getSize();
                     libPage.drawImage(pngImage, { x: 0, y: 0, width, height });
                 }
@@ -1050,9 +1062,9 @@ async function executeExport() {
                 let pdf = null;
                 for (let i = 1; i <= pdfDoc.numPages; i++) {
                     const page = await pdfDoc.getPage(i);
-                    const vp   = page.getViewport({ scale: 1 });         // ← was scale:2
-                    const tmp  = document.createElement('canvas');
-                    tmp.width  = vp.width; tmp.height = vp.height;
+                    const vp = page.getViewport({ scale: 1 });         // ← was scale:2
+                    const tmp = document.createElement('canvas');
+                    tmp.width = vp.width; tmp.height = vp.height;
                     await page.render({ canvasContext: tmp.getContext('2d'), viewport: vp }).promise;
 
                     const sc = new fabric.StaticCanvas(null, { width: vp.width, height: vp.height });
@@ -1064,14 +1076,14 @@ async function executeExport() {
                     });
 
                     const imgData = sc.toDataURL('image/jpeg', 0.75);    // ← was 0.85 at 2×
-                    const orient  = vp.width > vp.height ? 'l' : 'p';
+                    const orient = vp.width > vp.height ? 'l' : 'p';
                     if (i === 1) pdf = new jsPDF({ orientation: orient, unit: 'px', format: [vp.width, vp.height] });
                     else pdf.addPage([vp.width, vp.height], orient);
                     pdf.addImage(imgData, 'JPEG', 0, 0, vp.width, vp.height);
                 }
                 const blob = pdf.output('blob');
-                const url  = URL.createObjectURL(blob);
-                const a    = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
                 a.href = url; a.download = name + '.pdf';
                 document.body.appendChild(a); a.click();
                 document.body.removeChild(a);
@@ -1096,7 +1108,7 @@ document.addEventListener('keydown', e => {
         if (!canvas.getActiveObject()?.isEditing) { e.preventDefault(); deleteSelected(); }
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'd') { e.preventDefault(); duplicateSelected(); }
-    if (e.key === 'ArrowLeft')  changePage(-1);
+    if (e.key === 'ArrowLeft') changePage(-1);
     if (e.key === 'ArrowRight') changePage(1);
 });
 
@@ -1112,8 +1124,8 @@ document.getElementById('upload-org').addEventListener('change', async e => {
         document.getElementById('org-upload-box').style.display = 'none';
         isDirty = false;
         const ab = await readFileAsArrayBuffer(file);
-        orgPdfDoc   = await PDFLib.PDFDocument.load(ab);
-        orgPdfJsDoc = await pdfjsLib.getDocument(new Uint8Array(ab)).promise;
+        orgPdfDoc = await PDFLib.PDFDocument.load(ab);
+        orgPdfJsDoc = await pdfjsLib.getDocument(new Uint8Array(ab.slice(0))).promise;
         orgPageArray = Array.from({ length: orgPdfJsDoc.numPages }, (_, i) => i);
         await renderOrganizeGrid();
         showToast(orgPdfJsDoc.numPages + ' pages loaded');
@@ -1131,9 +1143,9 @@ async function renderOrganizeGrid() {
     const grid = document.getElementById('thumbnail-grid');
     grid.innerHTML = '';
     for (let i = 0; i < orgPageArray.length; i++) {
-        const page   = await orgPdfJsDoc.getPage(orgPageArray[i] + 1);
-        const vp     = page.getViewport({ scale: 0.3 });
-        
+        const page = await orgPdfJsDoc.getPage(orgPageArray[i] + 1);
+        const vp = page.getViewport({ scale: 0.3 });
+
         const wrap = document.createElement('div');
         wrap.className = 'thumb-card';
 
@@ -1210,7 +1222,7 @@ async function exportOrganizedPDF(filename) {
     showLoader('Saving...');
     try {
         const newPdf = await PDFLib.PDFDocument.create();
-        const pages  = await newPdf.copyPages(orgPdfDoc, orgPageArray);
+        const pages = await newPdf.copyPages(orgPdfDoc, orgPageArray);
         pages.forEach(p => newPdf.addPage(p));
         triggerDownload(await newPdf.save(), filename + '.pdf');
         isDirty = false;
@@ -1234,8 +1246,8 @@ document.getElementById('upload-merge').addEventListener('change', e => {
 
 function formatBytes(bytes) {
     if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
-    return (bytes/1024/1024).toFixed(1) + ' MB';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1024 / 1024).toFixed(1) + ' MB';
 }
 
 let touchDragIndex = -1;
@@ -1253,13 +1265,13 @@ function renderMergeList() {
         item.draggable = true;
 
         // Desktop Drag and Drop
-        item.ondragstart = (e) => { 
-            draggedIndex = i; 
+        item.ondragstart = (e) => {
+            draggedIndex = i;
             e.dataTransfer.effectAllowed = 'move';
             item.style.opacity = '0.5';
         };
-        item.ondragover = (e) => { 
-            e.preventDefault(); 
+        item.ondragover = (e) => {
+            e.preventDefault();
             e.dataTransfer.dropEffect = 'move';
             const rect = item.getBoundingClientRect();
             if (e.clientY < rect.top + rect.height / 2) {
@@ -1270,7 +1282,7 @@ function renderMergeList() {
                 item.style.borderBottom = '2px solid var(--accent)';
             }
         };
-        item.ondragleave = () => { 
+        item.ondragleave = () => {
             item.style.borderTop = '1px solid var(--border)';
             item.style.borderBottom = '1px solid var(--border)';
         };
@@ -1283,18 +1295,18 @@ function renderMergeList() {
 
             const rect = item.getBoundingClientRect();
             const dropAfter = e.clientY > rect.top + rect.height / 2;
-            
+
             let targetIndex = i;
             if (dropAfter && draggedIndex < targetIndex) targetIndex = targetIndex;
             else if (dropAfter) targetIndex++;
             else if (!dropAfter && draggedIndex > targetIndex) targetIndex = targetIndex;
 
             if (draggedIndex === targetIndex) return;
-            
+
             const moved = mergeFiles.splice(draggedIndex, 1)[0];
-            if(draggedIndex < targetIndex) targetIndex--;
+            if (draggedIndex < targetIndex) targetIndex--;
             mergeFiles.splice(targetIndex, 0, moved);
-            
+
             isDirty = true;
             renderMergeList();
         };
@@ -1313,7 +1325,7 @@ function renderMergeList() {
                 <button class="btn btn-danger" onclick="removeMergeFile(${i})" style="padding:5px 10px">✕</button>
             </div>
         `;
-        
+
         // Touch Drag and Drop
         const handle = item.querySelector('.merge-drag-handle');
         handle.addEventListener('touchstart', (e) => {
@@ -1321,16 +1333,16 @@ function renderMergeList() {
             touchDragElement = item;
             item.style.opacity = '0.5';
             item.style.transform = 'scale(0.98)';
-        }, {passive: false});
+        }, { passive: false });
 
         handle.addEventListener('touchmove', (e) => {
             if (touchDragIndex === -1) return;
             e.preventDefault();
             const currentY = e.touches[0].clientY;
-            
+
             const elements = document.elementsFromPoint(e.touches[0].clientX, currentY);
             const targetItem = elements.find(el => el.classList.contains('merge-item') && el !== touchDragElement);
-            
+
             document.querySelectorAll('.merge-item').forEach(el => {
                 el.style.borderTop = '1px solid var(--border)';
                 el.style.borderBottom = '1px solid var(--border)';
@@ -1341,17 +1353,17 @@ function renderMergeList() {
                 if (currentY < rect.top + rect.height / 2) targetItem.style.borderTop = '2px solid var(--accent)';
                 else targetItem.style.borderBottom = '2px solid var(--accent)';
             }
-        }, {passive: false});
+        }, { passive: false });
 
         handle.addEventListener('touchend', (e) => {
             if (touchDragIndex === -1) return;
             item.style.opacity = '1';
             item.style.transform = 'none';
-            
+
             const changedTouch = e.changedTouches[0];
             const elements = document.elementsFromPoint(changedTouch.clientX, changedTouch.clientY);
             const targetItem = elements.find(el => el.classList.contains('merge-item') && el !== touchDragElement);
-            
+
             document.querySelectorAll('.merge-item').forEach(el => {
                 el.style.borderTop = '1px solid var(--border)';
                 el.style.borderBottom = '1px solid var(--border)';
@@ -1361,7 +1373,7 @@ function renderMergeList() {
                 const targetIndex = parseInt(targetItem.dataset.index);
                 const rect = targetItem.getBoundingClientRect();
                 const dropAfter = changedTouch.clientY > rect.top + rect.height / 2;
-                
+
                 let finalIndex = targetIndex;
                 if (dropAfter) finalIndex++;
                 if (touchDragIndex < finalIndex) finalIndex--;
@@ -1394,7 +1406,7 @@ async function exportMergedPDF(filename) {
     try {
         const merged = await PDFLib.PDFDocument.create();
         for (const file of mergeFiles) {
-            const ab  = await readFileAsArrayBuffer(file);
+            const ab = await readFileAsArrayBuffer(file);
             const pdf = await PDFLib.PDFDocument.load(ab);
             const pgs = await merged.copyPages(pdf, pdf.getPageIndices());
             pgs.forEach(p => merged.addPage(p));
@@ -1418,8 +1430,8 @@ document.getElementById('upload-split').addEventListener('change', async e => {
         document.getElementById('split-upload-box').style.display = 'none';
         isDirty = false;
         const ab = await readFileAsArrayBuffer(file);
-        orgPdfDoc   = await PDFLib.PDFDocument.load(ab);
-        orgPdfJsDoc = await pdfjsLib.getDocument(new Uint8Array(ab)).promise;
+        orgPdfDoc = await PDFLib.PDFDocument.load(ab);
+        orgPdfJsDoc = await pdfjsLib.getDocument(new Uint8Array(ab.slice(0))).promise;
         splitSelectedPages.clear();
         await renderSplitGrid();
         showToast(orgPdfJsDoc.numPages + ' pages loaded — tap to select');
@@ -1437,8 +1449,8 @@ async function renderSplitGrid() {
     const grid = document.getElementById('split-grid');
     grid.innerHTML = '';
     for (let i = 0; i < orgPdfJsDoc.numPages; i++) {
-        const page   = await orgPdfJsDoc.getPage(i + 1);
-        const vp     = page.getViewport({ scale: 0.3 });
+        const page = await orgPdfJsDoc.getPage(i + 1);
+        const vp = page.getViewport({ scale: 0.3 });
 
         const wrap = document.createElement('div');
         wrap.className = 'thumb-card';
@@ -1492,7 +1504,7 @@ function updateSplitCount() {
 }
 
 function selectAllSplitPages() {
-    const grid  = document.getElementById('split-grid');
+    const grid = document.getElementById('split-grid');
     const cards = grid.querySelectorAll('.thumb-card');
     const allSelected = splitSelectedPages.size === cards.length;
     splitSelectedPages.clear();
@@ -1510,7 +1522,7 @@ async function exportSplitPDF(filename) {
     try {
         const newPdf = await PDFLib.PDFDocument.create();
         const sorted = [...splitSelectedPages].sort((a, b) => a - b);
-        const pages  = await newPdf.copyPages(orgPdfDoc, sorted);
+        const pages = await newPdf.copyPages(orgPdfDoc, sorted);
         pages.forEach(p => newPdf.addPage(p));
         triggerDownload(await newPdf.save(), filename + '.pdf');
         isDirty = false;
@@ -1522,8 +1534,8 @@ async function exportSplitPDF(filename) {
 // ─── Utils ───
 function triggerDownload(bytes, name) {
     const blob = new Blob([bytes], { type: 'application/pdf' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
     a.href = url; a.download = name;
     document.body.appendChild(a); a.click();
     document.body.removeChild(a);
@@ -1531,38 +1543,37 @@ function triggerDownload(bytes, name) {
 }
 
 // ─── Expose all to window ───
-window.navTo               = navTo;
-window.attemptNavHome      = attemptNavHome;
-window.confirmNavHome      = confirmNavHome;
-window.closeModal          = closeModal;
-window.openModal           = openModal;
-window.openSaveModal       = openSaveModal;
-window.openExportModal     = openExportModal;
-window.executeExport       = executeExport;
-window.setTool             = setTool;
-window.setZoom             = setZoom;
-window.changePage          = changePage;
-window.deleteSelected      = deleteSelected;
-window.duplicateSelected   = duplicateSelected;
-window.openSignatureModal  = openSignatureModal;
-window.clearSignature      = clearSignature;
-window.saveSignature       = saveSignature;
-window.handleImageUpload   = handleImageUpload;
-window.movePage            = movePage;
-window.deletePage          = deletePage;
-window.moveMergeFile       = moveMergeFile;
-window.removeMergeFile     = removeMergeFile;
+window.navTo = navTo;
+window.attemptNavHome = attemptNavHome;
+window.confirmNavHome = confirmNavHome;
+window.closeModal = closeModal;
+window.openModal = openModal;
+window.openSaveModal = openSaveModal;
+window.openExportModal = openExportModal;
+window.executeExport = executeExport;
+window.setTool = setTool;
+window.setZoom = setZoom;
+window.changePage = changePage;
+window.deleteSelected = deleteSelected;
+window.duplicateSelected = duplicateSelected;
+window.openSignatureModal = openSignatureModal;
+window.clearSignature = clearSignature;
+window.saveSignature = saveSignature;
+window.handleImageUpload = handleImageUpload;
+window.movePage = movePage;
+window.deletePage = deletePage;
+window.removeMergeFile = removeMergeFile;
 window.selectAllSplitPages = selectAllSplitPages;
-window.undo                = undo;
-window.redo                = redo;
-window.updateStyle         = updateStyle;
-window.selectColor         = selectColor;
-window.updateMainColor     = updateMainColor;
-window.toggleTextProp      = toggleTextProp;
-window.selectShape         = selectShape;
-window.insertStamp         = insertStamp;
-window.insertCustomStamp   = insertCustomStamp;
-window.activateTextScan    = activateTextScan;
-window.openTransferModal   = openTransferModal;
-window.executeTransfer     = executeTransfer;
-window.showQuickView       = showQuickView;
+window.undo = undo;
+window.redo = redo;
+window.updateStyle = updateStyle;
+window.selectColor = selectColor;
+window.updateMainColor = updateMainColor;
+window.toggleTextProp = toggleTextProp;
+window.selectShape = selectShape;
+window.insertStamp = insertStamp;
+window.insertCustomStamp = insertCustomStamp;
+window.activateTextScan = activateTextScan;
+window.openTransferModal = openTransferModal;
+window.executeTransfer = executeTransfer;
+window.showQuickView = showQuickView;
