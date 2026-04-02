@@ -213,7 +213,6 @@ async function executeTransfer(targetScreen) {
             document.getElementById('canvas-wrapper').style.display = 'block';
             await renderPage(pageNum, true);
         } else if (targetScreen === 'organize') {
-            originalPdfBytes = arrayBuf;
             orgPdfDoc = await PDFLib.PDFDocument.load(arrayBuf);
             orgPdfJsDoc = await pdfjsLib.getDocument(new Uint8Array(arrayBuf.slice(0))).promise;
             orgPageArray = Array.from({ length: orgPdfJsDoc.numPages }, (_, i) => i);
@@ -1158,10 +1157,15 @@ async function renderOrganizeGrid() {
         const cvsWrap = document.createElement('div');
         cvsWrap.className = 'thumb-canvas-wrap';
 
+        const scale = window.devicePixelRatio || 1;
         const tc = document.createElement('canvas');
-        tc.width = vp.width; tc.height = vp.height;
+        tc.width = Math.floor(vp.width * scale);
+        tc.height = Math.floor(vp.height * scale);
+        tc.style.width = Math.floor(vp.width) + "px";
+        tc.style.height = Math.floor(vp.height) + "px";
         tc.style.borderRadius = '6px';
-        await page.render({ canvasContext: tc.getContext('2d'), viewport: vp }).promise;
+        const transform = scale !== 1 ? [scale, 0, 0, scale, 0, 0] : null;
+        await page.render({ canvasContext: tc.getContext('2d'), transform, viewport: vp }).promise;
         cvsWrap.appendChild(tc);
 
         // Add isolated quickview button
@@ -1191,8 +1195,13 @@ async function showQuickView(pageNum) {
     const cvs = document.getElementById('quickview-canvas');
     const page = await orgPdfJsDoc.getPage(pageNum);
     const vp = page.getViewport({ scale: 1.5 });
-    cvs.width = vp.width; cvs.height = vp.height;
-    await page.render({ canvasContext: cvs.getContext('2d'), viewport: vp }).promise;
+    const scale = window.devicePixelRatio || 1;
+    cvs.width = Math.floor(vp.width * scale);
+    cvs.height = Math.floor(vp.height * scale);
+    cvs.style.width = Math.floor(vp.width) + "px";
+    cvs.style.height = Math.floor(vp.height) + "px";
+    const transform = scale !== 1 ? [scale, 0, 0, scale, 0, 0] : null;
+    await page.render({ canvasContext: cvs.getContext('2d'), transform, viewport: vp }).promise;
     openModal('quickview-modal');
 }
 
@@ -1467,10 +1476,15 @@ async function renderSplitGrid() {
         const cvsWrap = document.createElement('div');
         cvsWrap.className = 'thumb-canvas-wrap';
 
+        const scale = window.devicePixelRatio || 1;
         const tc = document.createElement('canvas');
-        tc.width = vp.width; tc.height = vp.height;
+        tc.width = Math.floor(vp.width * scale);
+        tc.height = Math.floor(vp.height * scale);
+        tc.style.width = Math.floor(vp.width) + "px";
+        tc.style.height = Math.floor(vp.height) + "px";
         tc.style.borderRadius = '6px';
-        await page.render({ canvasContext: tc.getContext('2d'), viewport: vp }).promise;
+        const transform = scale !== 1 ? [scale, 0, 0, scale, 0, 0] : null;
+        await page.render({ canvasContext: tc.getContext('2d'), transform, viewport: vp }).promise;
         cvsWrap.appendChild(tc);
 
         const qvBtn = document.createElement('div');
