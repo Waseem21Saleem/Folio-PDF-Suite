@@ -2,8 +2,8 @@
 const originalTextBaseline = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'textBaseline');
 if (originalTextBaseline) {
     Object.defineProperty(CanvasRenderingContext2D.prototype, 'textBaseline', {
-        get: function() { return originalTextBaseline.get.call(this); },
-        set: function(val) {
+        get: function () { return originalTextBaseline.get.call(this); },
+        set: function (val) {
             if (val === 'alphabetical') val = 'alphabetic';
             originalTextBaseline.set.call(this, val);
         }
@@ -213,6 +213,7 @@ async function executeTransfer(targetScreen) {
             document.getElementById('canvas-wrapper').style.display = 'block';
             await renderPage(pageNum, true);
         } else if (targetScreen === 'organize') {
+            originalPdfBytes = arrayBuf;
             orgPdfDoc = await PDFLib.PDFDocument.load(arrayBuf);
             orgPdfJsDoc = await pdfjsLib.getDocument(new Uint8Array(arrayBuf.slice(0))).promise;
             orgPageArray = Array.from({ length: orgPdfJsDoc.numPages }, (_, i) => i);
