@@ -2,17 +2,17 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <link rel="icon" type="image/x-icon"  href="./icons/favicon.ico?v=14">
-    <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png?v=14">
-    <link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16.png?v=14">
-    <link rel="apple-touch-icon" sizes="180x180" href="./icons/favicon-180.png?v=14">
+    <!-- Favicons - cache-busted -->
+    <link rel="icon" type="image/x-icon"  href="./icons/favicon.ico?v=3">
+    <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png?v=3">
+    <link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16.png?v=3">
+    <link rel="apple-touch-icon" sizes="180x180" href="./icons/favicon-180.png?v=3">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#0a0a0f">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="mobile-web-app-capable" content="yes">
     <title>Folio — PDF Suite</title>
-    <link rel="manifest" href="./manifest.json?v=14">
-    <script src="./app.js?v=14" defer></script>
+    <link rel="manifest" href="./manifest.json">
+    <script src="./app.js" defer></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
     
@@ -23,177 +23,461 @@
 
     <style>
         :root {
-            --bg: #0a0a0f; --surface: #111118; --surface2: #17171f; --surface3: #1e1e28;
-            --border: rgba(255,255,255,0.07); --border-strong: rgba(255,255,255,0.13);
-            --text: #f0f0f5; --text-muted: #7070a0; --text-dim: #40405a;
-            --accent: #6c63ff; --accent-glow: rgba(108,99,255,0.25); --accent3: #00d4aa;
+            --bg: #0a0a0f;
+            --surface: #111118;
+            --surface2: #17171f;
+            --surface3: #1e1e28;
+            --border: rgba(255,255,255,0.07);
+            --border-strong: rgba(255,255,255,0.13);
+            --text: #f0f0f5;
+            --text-muted: #7070a0;
+            --text-dim: #40405a;
+            --accent: #6c63ff;
+            --accent-glow: rgba(108,99,255,0.25);
+            --accent3: #00d4aa;
             --danger: #ff4757;
-            --radius: 16px; --radius-sm: 10px;
-            --toolbar-h: 64px; --header-h: 52px;
-            --font-display: 'Syne', sans-serif; --font-body: 'DM Sans', sans-serif;
+            --radius: 16px;
+            --radius-sm: 10px;
+            --toolbar-h: 64px;
+            --header-h: 52px;
+            --font-display: 'Syne', sans-serif;
+            --font-body: 'DM Sans', sans-serif;
         }
+
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        html, body { height: 100%; height: 100dvh; width: 100%; overflow: hidden; }
-        body { background: var(--bg); color: var(--text); font-family: var(--font-body); display: flex; flex-direction: column; }
+
+        html, body {
+            height: 100%; height: 100dvh;
+            width: 100%; overflow: hidden;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--font-body);
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── Scrollbars ── */
         ::-webkit-scrollbar { width: 3px; height: 3px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+
+        /* ── Screens ── */
         .screen { display: none; flex: 1; min-height: 0; flex-direction: column; overflow: hidden; }
         .screen.active { display: flex; }
 
-        /* HOME SCREEN */
-        #home-screen { overflow-y: auto; align-items: center; padding: 0 16px 40px; }
-        .home-hero { width: 100%; max-width: 900px; padding: 28px 0 24px; display: flex; justify-content: space-between; align-items: center; }
+        /* ══════════════════════════
+           HOME SCREEN
+        ══════════════════════════ */
+        #home-screen {
+            overflow-y: auto;
+            align-items: center;
+            padding: 0 16px 40px;
+        }
+
+        .home-hero {
+            width: 100%;
+            max-width: 900px;
+            padding: 28px 0 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
         .hero-logo { display: flex; align-items: center; gap: 12px; }
-        .logo-mark { width: 42px; height: 42px; background: var(--accent); border-radius: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; box-shadow: 0 0 30px var(--accent-glow); }
+
+        .logo-mark {
+            width: 42px; height: 42px;
+            background: var(--accent);
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            overflow: hidden;
+            flex-shrink: 0;
+            box-shadow: 0 0 30px var(--accent-glow);
+        }
         .logo-mark img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
-        .hero-wordmark { font-family: var(--font-display); font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+
+        .hero-wordmark {
+            font-family: var(--font-display);
+            font-size: 22px; font-weight: 800; letter-spacing: -0.5px;
+        }
         .hero-wordmark span { color: var(--accent); }
         .hero-tagline { font-size: 11px; color: var(--text-muted); font-weight: 300; margin-top: 2px; }
-        #install-btn { background: var(--surface3); border: 1px solid var(--border-strong); color: var(--text-muted); padding: 8px 14px; border-radius: var(--radius-sm); font-family: var(--font-body); font-size: 12px; font-weight: 500; cursor: pointer; display: none; align-items: center; gap: 6px; white-space: nowrap; flex-shrink: 0; }
-        
-        .tools-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; width: 100%; max-width: 900px; }
-        .tool-card { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 30px 20px; cursor: pointer; transition: all 0.22s cubic-bezier(0.34,1.56,0.64,1); display: flex; flex-direction: column; align-items: center; text-align: center; gap: 14px; position: relative; overflow: hidden; -webkit-user-select: none; user-select: none; }
+
+        #install-btn {
+            background: var(--surface3);
+            border: 1px solid var(--border-strong);
+            color: var(--text-muted);
+            padding: 8px 14px;
+            border-radius: var(--radius-sm);
+            font-family: var(--font-body);
+            font-size: 12px; font-weight: 500;
+            cursor: pointer;
+            display: none; align-items: center; gap: 6px;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        /* Tool cards grid — 2 col on mobile, 4 on desktop */
+        .tools-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            width: 100%; max-width: 900px;
+        }
+        @media (min-width: 600px) { .tools-grid { grid-template-columns: repeat(4, 1fr); gap: 16px; } }
+
+        .tool-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 20px 16px 18px;
+            cursor: pointer;
+            transition: all 0.22s cubic-bezier(0.34,1.56,0.64,1);
+            display: flex; flex-direction: column;
+            align-items: flex-start; gap: 10px;
+            position: relative; overflow: hidden;
+            -webkit-user-select: none; user-select: none;
+        }
         .tool-card:active { transform: scale(0.97); }
         @media (hover: hover) { .tool-card:hover { transform: translateY(-3px); border-color: var(--border-strong); } }
-        .tool-card::before { content: ''; position: absolute; inset: 0; opacity: 0; transition: opacity 0.3s; }
-        .tool-card:nth-child(1)::before { background: radial-gradient(circle at 50% 20%, rgba(108,99,255,0.15), transparent 70%); }
-        .tool-card:nth-child(2)::before { background: radial-gradient(circle at 50% 20%, rgba(255,107,157,0.15), transparent 70%); }
-        .tool-card:nth-child(3)::before { background: radial-gradient(circle at 50% 20%, rgba(0,212,170,0.15), transparent 70%); }
-        .tool-card:nth-child(4)::before { background: radial-gradient(circle at 50% 20%, rgba(255,179,71,0.15), transparent 70%); }
+
+        .tool-card::before {
+            content: ''; position: absolute; inset: 0; opacity: 0; transition: opacity 0.3s;
+        }
+        .tool-card:nth-child(1)::before { background: radial-gradient(circle at 20% 20%, rgba(108,99,255,0.15), transparent 70%); }
+        .tool-card:nth-child(2)::before { background: radial-gradient(circle at 20% 20%, rgba(255,107,157,0.15), transparent 70%); }
+        .tool-card:nth-child(3)::before { background: radial-gradient(circle at 20% 20%, rgba(0,212,170,0.15), transparent 70%); }
+        .tool-card:nth-child(4)::before { background: radial-gradient(circle at 20% 20%, rgba(255,179,71,0.15), transparent 70%); }
         .tool-card:active::before { opacity: 1; }
-        .tool-icon { width: 56px; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 26px; }
+
+        .tool-icon {
+            width: 42px; height: 42px; border-radius: 12px;
+            display: flex; align-items: center; justify-content: center; font-size: 20px;
+        }
         .tool-card:nth-child(1) .tool-icon { background: rgba(108,99,255,0.15); }
         .tool-card:nth-child(2) .tool-icon { background: rgba(255,107,157,0.15); }
         .tool-card:nth-child(3) .tool-icon { background: rgba(0,212,170,0.15); }
         .tool-card:nth-child(4) .tool-icon { background: rgba(255,179,71,0.15); }
-        .tool-name { font-family: var(--font-display); font-size: 18px; font-weight: 700; }
-        .tool-desc { font-size: 13px; color: var(--text-muted); line-height: 1.45; font-weight: 300; }
-        
+
+        .tool-name { font-family: var(--font-display); font-size: 15px; font-weight: 700; }
+        .tool-desc { font-size: 11px; color: var(--text-muted); line-height: 1.45; font-weight: 300; }
+        .tool-arrow { position: absolute; bottom: 14px; right: 14px; font-size: 14px; color: var(--text-dim); }
+
+        /* Feature pills */
         .divider { width: 100%; max-width: 900px; height: 1px; background: var(--border); margin: 28px 0; }
         .section-title { font-family: var(--font-display); font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); width: 100%; max-width: 900px; margin-bottom: 12px; }
-        .feature-row { width: 100%; max-width: 900px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+
+        .feature-row {
+            width: 100%; max-width: 900px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
         @media (max-width: 500px) { .feature-row { grid-template-columns: 1fr; gap: 8px; } }
-        .feature-pill { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 12px; display: flex; align-items: center; gap: 10px; }
+
+        .feature-pill {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 12px; padding: 14px 12px;
+            display: flex; align-items: center; gap: 10px;
+        }
         .feature-pill-icon { font-size: 18px; flex-shrink: 0; }
         .feature-pill-text { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
         .feature-pill-text strong { display: block; font-size: 12px; color: var(--text); font-weight: 500; margin-bottom: 1px; }
-        
-        .creator-tag { width: 100%; max-width: 900px; text-align: center; padding: 30px 0 10px; color: var(--text-dim); font-size: 12px; font-weight: 300; letter-spacing: 0.3px; margin-top: auto; }
-        .creator-tag a { color: var(--text-muted); font-weight: 500; text-decoration: none; transition: color 0.2s; }
-        .creator-tag a:hover { color: var(--accent); }
 
-        /* TOOL HEADER */
-        #tool-header { display: none; background: var(--surface); border-bottom: 1px solid var(--border); height: var(--header-h); padding: 0 10px; justify-content: space-between; align-items: center; flex-shrink: 0; z-index: 50; gap: 8px; }
+        /* ══════════════════════════
+           TOOL HEADER
+        ══════════════════════════ */
+        #tool-header {
+            display: none;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            height: var(--header-h);
+            padding: 0 10px;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+            z-index: 50;
+            gap: 8px;
+        }
         #tool-header.visible { display: flex; }
-        .back-btn { display: flex; align-items: center; gap: 6px; padding: 7px 12px; background: var(--surface3); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-muted); font-family: var(--font-body); font-size: 13px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
-        #tool-title { font-family: var(--font-display); font-size: 15px; font-weight: 700; flex: 1; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        
-        #header-actions { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
-        
-        /* Mobile Header Responsiveness */
-        @media (max-width: 600px) { 
-            #tool-title { display: none; } 
-            .btn-label { display: none !important; }
-            #header-actions .btn { padding: 8px; font-size: 14px; } 
-            .page-nav span { min-width: 20px; }
+
+        .back-btn {
+            display: flex; align-items: center; gap: 6px;
+            padding: 7px 12px;
+            background: var(--surface3); border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text-muted); font-family: var(--font-body);
+            font-size: 13px; cursor: pointer; white-space: nowrap; flex-shrink: 0;
         }
 
-        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 7px 12px; border-radius: var(--radius-sm); font-family: var(--font-body); font-size: 12px; font-weight: 500; cursor: pointer; border: none; transition: all 0.18s; white-space: nowrap; }
+        #tool-title {
+            font-family: var(--font-display); font-size: 15px; font-weight: 700;
+            flex: 1; text-align: center;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        @media (max-width: 420px) { #tool-title { display: none; } }
+
+        #header-actions {
+            display: flex; align-items: center; gap: 5px; flex-shrink: 0;
+        }
+        /* On very small screens, shrink the Open PDF button */
+        @media (max-width: 360px) {
+            #header-actions .btn { font-size: 11px; padding: 6px 8px; }
+            .page-nav span { min-width: 28px; }
+        }
+
+        /* ── Buttons ── */
+        .btn {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 7px 12px;
+            border-radius: var(--radius-sm);
+            font-family: var(--font-body); font-size: 12px; font-weight: 500;
+            cursor: pointer; border: none;
+            transition: all 0.18s; white-space: nowrap;
+        }
         .btn:disabled { opacity: 0.3; cursor: default; }
         .btn-ghost { background: var(--surface3); border: 1px solid var(--border); color: var(--text-muted); }
         .btn-primary { background: var(--accent); color: white; box-shadow: 0 3px 14px var(--accent-glow); }
         .btn-success { background: var(--accent3); color: #0a1a16; font-weight: 600; }
         .btn-danger { background: rgba(255,71,87,0.15); border: 1px solid rgba(255,71,87,0.3); color: var(--danger); }
-        .page-nav { display: flex; align-items: center; gap: 2px; background: var(--surface3); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 3px 4px; }
-        .page-nav button { background: none; border: none; color: var(--text-muted); padding: 4px 7px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+
+        /* Page nav */
+        .page-nav {
+            display: flex; align-items: center; gap: 2px;
+            background: var(--surface3); border: 1px solid var(--border);
+            border-radius: var(--radius-sm); padding: 3px 4px;
+        }
+        .page-nav button {
+            background: none; border: none; color: var(--text-muted);
+            padding: 4px 7px; border-radius: 6px; cursor: pointer; font-size: 13px;
+        }
         .page-nav button:disabled { opacity: 0.3; }
         .page-nav span { font-size: 11px; font-weight: 600; color: var(--text-muted); min-width: 36px; text-align: center; }
 
-        /* EDITOR SCREEN */
+        /* ══════════════════════════
+           EDITOR SCREEN
+        ══════════════════════════ */
         #editor-screen { position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: none; }
-        #workspace { position: absolute; top: 0; bottom: var(--toolbar-h); left: 0; right: 0; overflow: auto; background: #0d0d14; z-index: 30; -webkit-overflow-scrolling: touch; }
-        #workspace.obj-active { overflow: hidden !important; touch-action: none !important; }
+
+        #workspace {
+            position: absolute;
+            top: 0; bottom: var(--toolbar-h);
+            left: 0; right: 0;
+            overflow: auto;
+            background: #0d0d14;
+            /* NO padding — padding breaks clientWidth measurements */
+            z-index: 30;
+            -webkit-overflow-scrolling: touch;
+        }
+        #workspace.obj-active {
+            overflow: hidden !important;
+            touch-action: none !important;
+        }
         .upper-canvas { touch-action: none !important; }
-        #scroll-spacer { display: flex; justify-content: center; align-items: flex-start; padding: 16px; box-sizing: border-box; }
-        #editor-placeholder { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text-dim); pointer-events: none; }
-        .placeholder-icon { width: 64px; height: 64px; border: 2px dashed var(--border); border-radius: 18px; display: flex; align-items: center; justify-content: center; font-size: 26px; margin-bottom: 4px; }
-        #canvas-wrapper { display: none; background: white; box-shadow: 0 20px 60px rgba(0,0,0,0.5); transform-origin: top center; flex-shrink: 0; }
 
-        /* COLOR PICKER DOTS & FORMATS */
-        .color-dot { width: 24px; height: 24px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; flex-shrink: 0; transition: transform 0.1s; }
-        .color-dot:active { transform: scale(0.85); }
-        .color-dot.selected { border-color: white; box-shadow: 0 0 8px rgba(255,255,255,0.4); }
-        .color-rainbow { background: linear-gradient(135deg, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff); position: relative; display: flex; justify-content: center; align-items: center; }
-        .color-rainbow input { opacity: 0; position: absolute; inset: 0; cursor: pointer; }
-        
-        .text-format-btn, .shape-opt { background: transparent; border: 1px solid transparent; color: var(--text-muted); width: 26px; height: 26px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; }
-        .text-format-btn.active, .shape-opt.active { background: rgba(108,99,255,0.2); color: var(--accent); border-color: var(--accent); }
+        /* scroll-spacer: full viewport size, centers canvas */
+        #scroll-spacer {
+            min-width: 100%;
+            min-height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 16px;
+            box-sizing: border-box;
+        }
 
-        #toolbar { position: absolute; bottom: 0; left: 0; right: 0; height: var(--toolbar-h); background: var(--surface); border-top: 1px solid var(--border); display: flex; align-items: center; gap: 0; padding: 0 4px; overflow-x: auto; overflow-y: hidden; z-index: 40; -ms-overflow-style: none; scrollbar-width: none; }
+        #editor-placeholder {
+            position: absolute; inset: 0;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            gap: 10px; color: var(--text-dim); pointer-events: none;
+        }
+        .placeholder-icon {
+            width: 64px; height: 64px;
+            border: 2px dashed var(--border); border-radius: 18px;
+            display: flex; align-items: center; justify-content: center; font-size: 26px;
+            margin-bottom: 4px;
+        }
+
+        #canvas-wrapper {
+            display: none; background: white;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            flex-shrink: 0;
+            /* NO transform-origin, NO CSS scale — zoom is baked into canvas size */
+        }
+
+        /* ── Toolbar ── */
+        #toolbar {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            height: var(--toolbar-h);
+            background: var(--surface);
+            border-top: 1px solid var(--border);
+            display: flex; align-items: center;
+            gap: 0; padding: 0 4px;
+            overflow-x: auto; overflow-y: hidden;
+            z-index: 40;
+            -ms-overflow-style: none; scrollbar-width: none;
+        }
         #toolbar::-webkit-scrollbar { display: none; }
-        .tool-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 6px 8px; border-radius: 10px; border: none; background: none; color: var(--text-muted); cursor: pointer; transition: all 0.15s; min-width: 50px; flex-shrink: 0; font-family: var(--font-body); -webkit-user-select: none; user-select: none; }
-        .tool-btn:active, .tool-btn.active { background: rgba(108,99,255,0.15); color: var(--accent); outline: 1px solid rgba(108,99,255,0.4); }
+
+        .tool-btn {
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            gap: 3px; padding: 6px 8px;
+            border-radius: 10px; border: none;
+            background: none; color: var(--text-muted);
+            cursor: pointer; transition: all 0.15s;
+            min-width: 50px; flex-shrink: 0;
+            font-family: var(--font-body);
+            -webkit-user-select: none; user-select: none;
+        }
+        .tool-btn:active, .tool-btn.active {
+            background: rgba(108,99,255,0.15);
+            color: var(--accent);
+            outline: 1px solid rgba(108,99,255,0.4);
+        }
         .tool-btn .t-icon { font-size: 19px; line-height: 1; }
         .tool-btn .t-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.4px; font-weight: 500; }
         .toolbar-sep { width: 1px; height: 24px; background: var(--border); flex-shrink: 0; margin: 0 2px; }
 
-        /* ORGANIZE / MERGE / SPLIT */
-        #organize-screen, #merge-screen, #split-screen { flex: 1; min-height: 0; overflow: hidden; flex-direction: column; }
+        /* ══════════════════════════
+           ORGANIZE / MERGE / SPLIT
+        ══════════════════════════ */
+        #organize-screen, #merge-screen, #split-screen {
+            flex: 1; min-height: 0; overflow: hidden; flex-direction: column;
+        }
         .tool-content { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; }
-        .upload-zone { border: 2px dashed var(--border-strong); border-radius: 18px; padding: 36px 20px; text-align: center; cursor: pointer; transition: all 0.25s; max-width: 440px; margin: 0 auto; background: var(--surface); }
+
+        .upload-zone {
+            border: 2px dashed var(--border-strong); border-radius: 18px;
+            padding: 36px 20px; text-align: center; cursor: pointer;
+            transition: all 0.25s; max-width: 440px; margin: 0 auto;
+            background: var(--surface);
+        }
         .upload-zone:active { border-color: var(--accent); background: rgba(108,99,255,0.05); }
         @media (hover: hover) { .upload-zone:hover { border-color: var(--accent); background: rgba(108,99,255,0.05); } }
         .upload-zone-icon { width: 56px; height: 56px; background: var(--surface3); border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 24px; margin: 0 auto 14px; }
         .upload-zone h3 { font-family: var(--font-display); font-size: 16px; font-weight: 700; margin-bottom: 6px; }
         .upload-zone p { font-size: 12px; color: var(--text-muted); }
+
         .page-grid { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; max-width: 1200px; margin: 16px auto 0; padding-bottom: 20px; }
-        
-        .thumb-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 10px; display: flex; flex-direction: column; align-items: center; gap: 8px; position: relative; transition: all 0.18s; }
+
+        .thumb-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 14px; padding: 10px;
+            display: flex; flex-direction: column; align-items: center; gap: 8px;
+            position: relative; transition: all 0.18s; cursor: pointer;
+        }
+        .thumb-card:active { border-color: var(--border-strong); }
         .thumb-card.selected { border-color: var(--accent); background: rgba(108,99,255,0.08); }
-        .thumb-badge { position: absolute; top: -8px; left: -8px; width: 24px; height: 24px; background: var(--surface3); border: 1px solid var(--border-strong); color: white; border-radius: 50%; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; z-index: 10; pointer-events: none;}
-        .thumb-card.selected .thumb-badge { background: var(--accent3); color: #0a1a16; border-color: var(--accent3); }
-        
-        .thumb-canvas-wrap { position: relative; cursor: pointer; }
-        
-        .quickview-btn { position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.6); color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; backdrop-filter: blur(4px); font-size: 14px; z-index: 20; }
-        .quickview-btn:active { background: var(--accent); }
+
+        .thumb-badge {
+            position: absolute; top: -8px; left: -8px;
+            width: 22px; height: 22px; background: var(--accent); color: white;
+            border-radius: 50%; font-size: 10px; font-weight: 700;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .thumb-card.selected .thumb-badge { background: var(--accent3); color: #0a1a16; }
 
         .thumb-controls { display: flex; gap: 5px; }
-        .thumb-ctrl-btn { background: var(--surface3); border: 1px solid var(--border); color: var(--text-muted); padding: 6px 10px; border-radius: 7px; font-size: 12px; cursor: pointer; }
+        .thumb-ctrl-btn {
+            background: var(--surface3); border: 1px solid var(--border);
+            color: var(--text-muted); padding: 4px 8px; border-radius: 7px;
+            font-size: 11px; cursor: pointer;
+        }
         .thumb-ctrl-btn.del { border-color: rgba(255,71,87,0.2); color: var(--danger); }
-        
-        .merge-item { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; gap: 10px; transition: border-color 0.1s; }
-        .merge-drag-handle { cursor: grab; font-size: 22px; color: var(--text-dim); padding-right: 8px; padding-left: 4px; -webkit-user-select: none; user-select: none; touch-action: none; }
-        .merge-drag-handle:active { cursor: grabbing; color: var(--accent); }
+
+        .preview-popup {
+            display: none; position: fixed; z-index: 300;
+            top: 50%; left: 50%; transform: translate(-50%,-50%);
+            background: white; border-radius: 10px; overflow: hidden;
+            box-shadow: 0 30px 80px rgba(0,0,0,0.8); pointer-events: none;
+            max-width: 80vw; max-height: 72vh;
+        }
+        .thumb-card:hover .preview-popup { display: block; }
+
+        /* Merge list */
+        .merge-item {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 12px; padding: 12px 14px;
+            display: flex; justify-content: space-between; align-items: center; gap: 10px;
+        }
+        .merge-item-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
         .merge-item-icon { width: 30px; height: 30px; background: rgba(108,99,255,0.15); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
         .merge-item-text { min-width: 0; }
         .merge-item-text .fname { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
         .merge-item-text .fsize { font-size: 11px; color: var(--text-muted); }
         .merge-controls { display: flex; gap: 4px; flex-shrink: 0; }
 
-        /* MODALS & OVERLAYS */
-        .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.72); backdrop-filter: blur(8px); z-index: 500; align-items: center; justify-content: center; padding: 16px; }
+        /* ══════════════════════════
+           MODALS
+        ══════════════════════════ */
+        .modal-backdrop {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.72); backdrop-filter: blur(8px);
+            z-index: 200; align-items: center; justify-content: center;
+            padding: 16px;
+        }
         .modal-backdrop.open { display: flex; }
-        .modal { background: var(--surface); border: 1px solid var(--border-strong); border-radius: 22px; padding: 24px; width: 100%; max-width: 380px; box-shadow: 0 30px 70px rgba(0,0,0,0.5); }
+
+        .modal {
+            background: var(--surface); border: 1px solid var(--border-strong);
+            border-radius: 22px; padding: 24px;
+            width: 100%; max-width: 380px;
+            box-shadow: 0 30px 70px rgba(0,0,0,0.5);
+        }
         .modal h3 { font-family: var(--font-display); font-size: 18px; font-weight: 700; margin-bottom: 6px; }
         .modal p { font-size: 13px; color: var(--text-muted); margin-bottom: 18px; line-height: 1.6; }
         .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+
         .form-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 5px; display: block; font-weight: 500; }
-        .form-input { width: 100%; background: var(--surface3); border: 1px solid var(--border); border-radius: 10px; padding: 11px 12px; color: var(--text); font-family: var(--font-body); font-size: 14px; outline: none; margin-bottom: 14px; transition: border-color 0.2s; }
+        .form-input {
+            width: 100%; background: var(--surface3); border: 1px solid var(--border);
+            border-radius: 10px; padding: 11px 12px; color: var(--text);
+            font-family: var(--font-body); font-size: 14px; outline: none;
+            margin-bottom: 14px; transition: border-color 0.2s;
+        }
         .form-input:focus { border-color: var(--accent); }
         select.form-input { border-right: 8px solid transparent; -webkit-appearance: none; }
-        #loader-overlay { display: none; position: fixed; inset: 0; background: rgba(10,10,15,0.88); backdrop-filter: blur(10px); z-index: 600; flex-direction: column; align-items: center; justify-content: center; gap: 18px; }
+
+        /* Loader */
+        #loader-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(10,10,15,0.88); backdrop-filter: blur(10px);
+            z-index: 400; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+        }
         #loader-overlay.visible { display: flex; }
         .loader-ring { width: 48px; height: 48px; border-radius: 50%; border: 3px solid var(--border-strong); border-top-color: var(--accent); animation: spin 0.8s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
         #loader-text { font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--text-muted); }
+
+        /* Signature canvas */
         #sig-container { background: white; border-radius: 10px; overflow: hidden; border: 2px dashed #ccc; margin-bottom: 14px; }
-        #toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--surface3); border: 1px solid var(--border-strong); border-radius: 100px; padding: 10px 18px; font-size: 13px; font-weight: 500; z-index: 700; transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1); white-space: nowrap; box-shadow: 0 6px 24px rgba(0,0,0,0.3); max-width: 90vw; text-align: center; pointer-events: none; }
+
+        /* Toast - hidden when empty */
+        #toast {
+            position: fixed; bottom: 80px; left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            background: var(--surface3); border: 1px solid var(--border-strong);
+            border-radius: 100px; padding: 10px 18px;
+            font-size: 13px; font-weight: 500;
+            z-index: 500; transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+            white-space: nowrap; box-shadow: 0 6px 24px rgba(0,0,0,0.3);
+            max-width: 90vw; text-align: center;
+            pointer-events: none;
+        }
         #toast:empty { display: none; }
         #toast.show { transform: translateX(-50%) translateY(0); }
+
+        /* Responsive button labels - visible on desktop, hidden on small mobile */
         .btn-label { display: inline; }
-        
+        @media (max-width: 400px) { .btn-label { display: none; } }
+
+        /* Animations */
         @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
         .home-hero   { animation: fadeUp 0.4s ease both; }
         .tools-grid  { animation: fadeUp 0.4s 0.08s ease both; }
@@ -202,6 +486,7 @@
 </head>
 <body>
 
+<!-- ══════════════ HOME ══════════════ -->
 <div id="home-screen" class="screen active">
     <div class="home-hero">
         <div class="hero-logo">
@@ -219,29 +504,33 @@
             <div class="tool-icon">✏️</div>
             <div>
                 <div class="tool-name">Edit PDF</div>
-                <div class="tool-desc">Draw, annotate, type & sign</div>
+                <div class="tool-desc">Draw, annotate, type & sign documents</div>
             </div>
+            <div class="tool-arrow">↗</div>
         </div>
         <div class="tool-card" onclick="navTo('organize')">
             <div class="tool-icon">🗂️</div>
             <div>
                 <div class="tool-name">Organize</div>
-                <div class="tool-desc">Rearrange & delete pages</div>
+                <div class="tool-desc">Rearrange, rotate & delete pages</div>
             </div>
+            <div class="tool-arrow">↗</div>
         </div>
         <div class="tool-card" onclick="navTo('merge')">
             <div class="tool-icon">🔗</div>
             <div>
                 <div class="tool-name">Merge</div>
-                <div class="tool-desc">Combine multiple PDFs</div>
+                <div class="tool-desc">Combine multiple PDFs into one</div>
             </div>
+            <div class="tool-arrow">↗</div>
         </div>
         <div class="tool-card" onclick="navTo('split')">
             <div class="tool-icon">✂️</div>
             <div>
                 <div class="tool-name">Extract</div>
-                <div class="tool-desc">Pull specific pages out</div>
+                <div class="tool-desc">Pull specific pages from any PDF</div>
             </div>
+            <div class="tool-arrow">↗</div>
         </div>
     </div>
 
@@ -271,62 +560,44 @@
             </div>
         </div>
     </div>
-    
-    <div class="creator-tag">Created by <a href="https://waseemsaleem.com" target="_blank">Waseem Saleem</a></div>
 </div>
 
+<!-- ══════════════ TOOL HEADER ══════════════ -->
 <div id="tool-header">
     <button class="back-btn" onclick="attemptNavHome()">← <span>Back</span></button>
     <div id="tool-title"></div>
     <div id="header-actions"></div>
 </div>
 
+<!-- ══════════════ EDITOR ══════════════ -->
 <div id="editor-screen" class="screen">
-    
+    <!-- Floating tool options bubble (shown above active toolbar button) -->
     <div id="tool-bubble" style="display:none;position:absolute;z-index:200;bottom:70px;left:50%;transform:translateX(-50%);
         background:var(--surface);border:1px solid var(--border-strong);border-radius:14px;padding:10px 14px;
-        align-items:center;gap:12px;box-shadow:0 8px 32px rgba(0,0,0,0.5);white-space:nowrap;flex-wrap:nowrap;">
-        
-        <div id="color-palette" style="display:flex; gap:6px; align-items:center;">
-            <div id="main-color-dot" class="color-dot selected" style="background:#000000;" onclick="selectColor(this, this.style.backgroundColor)"></div>
-            <label class="color-dot color-rainbow" title="Custom Color">
-                <input type="color" id="colorPicker" value="#000000" onchange="updateMainColor(this.value)">
-            </label>
-        </div>
-
+        align-items:center;gap:10px;box-shadow:0 8px 32px rgba(0,0,0,0.5);white-space:nowrap;flex-wrap:nowrap;">
+        <input type="color" id="colorPicker" value="#000000" onchange="updateStyle()" title="Color"
+            style="width:30px;height:30px;border-radius:8px;border:2px solid var(--border-strong);background:none;cursor:pointer;padding:2px;flex-shrink:0;">
         <div style="width:1px;height:20px;background:var(--border);flex-shrink:0;"></div>
-        
         <label style="font-size:11px;color:var(--text-dim);">Size</label>
         <input type="number" id="sizePicker" value="20" min="1" max="150" oninput="updateStyle()"
-            style="width:48px;background:var(--surface3);border:1px solid var(--border);color:var(--text);padding:5px;border-radius:8px;font-size:12px;outline:none;font-family:var(--font-body);">
-        
-        <div id="font-wrap" style="display:flex;align-items:center;gap:4px;">
-            <div style="width:1px;height:20px;background:var(--border);flex-shrink:0;margin:0 2px;"></div>
+            style="width:52px;background:var(--surface3);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:8px;font-size:12px;outline:none;font-family:var(--font-body);">
+        <div id="font-wrap" style="display:flex;align-items:center;gap:6px;">
+            <div style="width:1px;height:20px;background:var(--border);flex-shrink:0;"></div>
+            <label style="font-size:11px;color:var(--text-dim);">Font</label>
             <select id="fontFamily" onchange="updateStyle()"
-                style="background:var(--surface3);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:8px;font-size:12px;outline:none;font-family:var(--font-body);margin-right:4px;">
+                style="background:var(--surface3);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:8px;font-size:12px;outline:none;font-family:var(--font-body);border-right:8px solid transparent;">
                 <option value="Arial">Sans</option>
                 <option value="Georgia">Serif</option>
                 <option value="Courier New">Mono</option>
                 <option value="Impact">Impact</option>
             </select>
-            <button id="btn-bold" class="text-format-btn" onclick="toggleTextProp('fontWeight', 'bold', 'normal')" style="font-weight:bold;">B</button>
-            <button id="btn-italic" class="text-format-btn" onclick="toggleTextProp('fontStyle', 'italic', 'normal')" style="font-style:italic; font-family:serif;">I</button>
-            <button id="btn-underline" class="text-format-btn" onclick="toggleTextProp('underline', true, false)" style="text-decoration:underline;">U</button>
-            <button id="btn-scan-text" class="text-format-btn" onclick="activateTextScan()" title="Scan Text Style" style="color:var(--accent3);">🔍</button>
         </div>
-
-        <div id="shape-wrap" style="display:none;align-items:center;gap:4px;">
-            <div style="width:1px;height:20px;background:var(--border);flex-shrink:0;margin:0 2px;"></div>
-            <button class="shape-opt active" onclick="selectShape(this, 'rect')">▭</button>
-            <button class="shape-opt" onclick="selectShape(this, 'circle')">◯</button>
-            <button class="shape-opt" onclick="selectShape(this, 'triangle')">△</button>
-            <button class="shape-opt" onclick="selectShape(this, 'line')">╱</button>
-        </div>
-
         <div id="bubble-arrow" style="position:absolute;bottom:-7px;left:50%;transform:translateX(-50%);
             width:12px;height:12px;background:var(--surface);border-right:1px solid var(--border-strong);
             border-bottom:1px solid var(--border-strong);transform:translateX(-50%) rotate(45deg);"></div>
     </div>
+
+
 
     <div id="workspace" class="no-scroll">
         <div id="editor-placeholder">
@@ -339,7 +610,7 @@
                 <canvas id="main-canvas"></canvas>
             </div>
         </div>
-        
+        <!-- obj-actions lives inside workspace so it scrolls with canvas content -->
         <div id="obj-actions" style="display:none;position:absolute;z-index:100;pointer-events:auto;
             background:var(--surface);border:1px solid var(--border-strong);border-radius:10px;padding:5px 8px;
             gap:6px;align-items:center;box-shadow:0 4px 20px rgba(0,0,0,0.5);">
@@ -347,9 +618,9 @@
                 style="background:var(--surface3);border:1px solid var(--border);color:var(--text-muted);padding:5px 10px;border-radius:7px;font-size:13px;cursor:pointer;">⧉</button>
             <button onclick="deleteSelected()" title="Delete"
                 style="background:rgba(255,71,87,0.12);border:1px solid rgba(255,71,87,0.3);color:var(--danger);padding:5px 10px;border-radius:7px;font-size:13px;cursor:pointer;">🗑</button>
-            <div id="obj-actions-arrow" style="position:absolute;top:-7px;left:50%;
-                width:12px;height:12px;background:var(--surface);border-left:1px solid var(--border-strong);
-                border-top:1px solid var(--border-strong);transform:translateX(-50%) rotate(45deg);"></div>
+            <div id="obj-actions-arrow" style="position:absolute;bottom:-7px;left:50%;
+                width:12px;height:12px;background:var(--surface);border-right:1px solid var(--border-strong);
+                border-bottom:1px solid var(--border-strong);transform:translateX(-50%) rotate(45deg);"></div>
         </div>
     </div>
 
@@ -372,11 +643,11 @@
             <span class="t-label">Mark</span>
         </button>
         <button id="tool-shape" class="tool-btn" onclick="setTool('shape')">
-            <span class="t-icon">△</span>
+            <span class="t-icon">▭</span>
             <span class="t-label">Shape</span>
         </button>
         <div class="toolbar-sep"></div>
-        <button id="tool-sig-place" class="tool-btn" onclick="setTool('sig-place')">
+        <button class="tool-btn" onclick="openSignatureModal()">
             <span class="t-icon">🖋</span>
             <span class="t-label">Sign</span>
         </button>
@@ -398,8 +669,12 @@
             <span class="t-label">Redo</span>
         </button>
     </div>
+    <div style="width:100%;max-width:900px;text-align:center;padding:24px 0 8px;color:var(--text-dim);font-size:12px;font-weight:300;letter-spacing:0.3px;">
+        Created by <span style="color:var(--text-muted);font-weight:500;">Waseem Saleem</span>
+    </div>
 </div>
 
+<!-- ══════════════ ORGANIZE ══════════════ -->
 <div id="organize-screen" class="screen">
     <div class="tool-content">
         <div id="org-upload-box" class="upload-zone" onclick="document.getElementById('upload-org').click()">
@@ -411,6 +686,7 @@
     </div>
 </div>
 
+<!-- ══════════════ MERGE ══════════════ -->
 <div id="merge-screen" class="screen">
     <div class="tool-content">
         <div class="upload-zone" onclick="document.getElementById('upload-merge').click()" style="max-width:480px;margin:0 auto 24px;">
@@ -422,6 +698,7 @@
     </div>
 </div>
 
+<!-- ══════════════ SPLIT / EXTRACT ══════════════ -->
 <div id="split-screen" class="screen">
     <div class="tool-content">
         <div id="split-upload-box" class="upload-zone" onclick="document.getElementById('upload-split').click()">
@@ -433,10 +710,13 @@
     </div>
 </div>
 
+<!-- ══════════════ MODALS ══════════════ -->
+
+<!-- Unsaved -->
 <div id="unsaved-modal" class="modal-backdrop">
     <div class="modal">
         <h3>Unsaved changes</h3>
-        <p>This will discard your edits. Are you sure?</p>
+        <p>Going back will discard your edits. Are you sure?</p>
         <div class="modal-actions">
             <button class="btn btn-ghost" onclick="closeModal('unsaved-modal')">Cancel</button>
             <button class="btn btn-danger" onclick="confirmNavHome()">Discard & Exit</button>
@@ -444,34 +724,13 @@
     </div>
 </div>
 
-<div id="transfer-modal" class="modal-backdrop">
-    <div class="modal">
-        <h3>Send PDF To...</h3>
-        <p>Move your current PDF seamlessly into another tool without saving first.</p>
-        <div class="modal-actions" style="justify-content:flex-start;flex-wrap:wrap;">
-            <button id="transfer-editor" class="btn btn-ghost transfer-opt" onclick="executeTransfer('editor')">✏️ Edit</button>
-            <button id="transfer-organize" class="btn btn-ghost transfer-opt" onclick="executeTransfer('organize')">🗂️ Organize</button>
-            <button id="transfer-split" class="btn btn-ghost transfer-opt" onclick="executeTransfer('split')">✂️ Extract</button>
-            <button id="transfer-merge" class="btn btn-ghost transfer-opt" onclick="executeTransfer('merge')">🔗 Merge</button>
-        </div>
-        <div class="modal-actions" style="margin-top:10px; border-top:1px solid var(--border); padding-top:10px;">
-            <button class="btn btn-ghost" onclick="closeModal('transfer-modal')">Cancel</button>
-        </div>
-    </div>
-</div>
-
-<div id="quickview-modal" class="modal-backdrop">
-    <div style="position:relative; max-width: 90vw; max-height: 90vh;">
-        <button onclick="closeModal('quickview-modal')" style="position:absolute; top:-15px; right:-15px; background:var(--danger); color:white; border:none; border-radius:50%; width:36px; height:36px; font-size:18px; cursor:pointer; z-index:400; box-shadow:0 4px 10px rgba(0,0,0,0.5);">✕</button>
-        <canvas id="quickview-canvas" style="max-width:100%; max-height:90vh; background:white; border-radius:8px; display:block; box-shadow: 0 10px 40px rgba(0,0,0,0.8);"></canvas>
-    </div>
-</div>
-
+<!-- Loader -->
 <div id="loader-overlay">
     <div class="loader-ring"></div>
     <div id="loader-text">Processing...</div>
 </div>
 
+<!-- Save modal (organize/merge/split) -->
 <div id="save-modal" class="modal-backdrop">
     <div class="modal">
         <h3>Save as...</h3>
@@ -484,6 +743,7 @@
     </div>
 </div>
 
+<!-- Export PDF/PNG modal -->
 <div id="export-modal" class="modal-backdrop">
     <div class="modal">
         <h3>Export file</h3>
@@ -501,6 +761,7 @@
     </div>
 </div>
 
+<!-- Signature modal -->
 <div id="sig-modal" class="modal-backdrop">
     <div class="modal" style="max-width:480px;">
         <h3>Draw your signature</h3>
@@ -517,27 +778,19 @@
     </div>
 </div>
 
+<!-- Stamp modal -->
 <div id="stamp-modal" class="modal-backdrop">
     <div class="modal">
         <h3>Insert Stamp</h3>
         <p>Choose a stamp to insert onto the page</p>
         <div id="stamp-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;"></div>
-        
-        <div style="border-top: 1px solid var(--border-strong); padding-top: 16px;">
-            <h4 style="font-family: var(--font-display); font-size: 14px; margin-bottom: 8px;">Custom Stamp</h4>
-            <input type="text" id="custom-stamp-text" class="form-input" placeholder="Type stamp text..." style="margin-bottom:10px;">
-            <div style="display:flex; gap:10px; align-items:center; margin-bottom:14px;">
-                <input type="color" id="custom-stamp-color" value="#6c63ff" style="width:36px;height:36px;border:none;background:none;cursor:pointer;">
-                <label style="font-size:12px;color:var(--text-muted);">Stamp Color</label>
-            </div>
-            <div style="display:flex; gap:8px;">
-                <button class="btn btn-ghost" onclick="closeModal('stamp-modal')" style="flex:1; justify-content:center;">Cancel</button>
-                <button class="btn btn-primary" onclick="insertCustomStamp()" style="flex:2; justify-content:center;">Create & Insert</button>
-            </div>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeModal('stamp-modal')">Cancel</button>
         </div>
     </div>
 </div>
 
+<!-- iOS install hint -->
 <div id="ios-install-modal" class="modal-backdrop">
     <div class="modal">
         <h3>Install Folio</h3>
@@ -548,10 +801,12 @@
     </div>
 </div>
 
+<!-- Toast -->
 <div id="toast"></div>
 
+<!-- Hidden file inputs -->
 <input type="file" id="upload-pdf"   accept="application/pdf"                  class="hidden" style="display:none">
-<input type="file" id="upload-img"   accept="image/*"                          class="hidden" style="display:none" onchange="handleImageUpload(event)">
+<input type="file" id="upload-img"   accept="image/*"                           class="hidden" style="display:none" onchange="handleImageUpload(event)">
 <input type="file" id="upload-org"   accept="application/pdf"                  class="hidden" style="display:none">
 <input type="file" id="upload-merge" accept="application/pdf" multiple         class="hidden" style="display:none">
 <input type="file" id="upload-split" accept="application/pdf"                  class="hidden" style="display:none">
